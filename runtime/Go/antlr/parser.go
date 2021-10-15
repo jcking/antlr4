@@ -273,7 +273,7 @@ func (p *BaseParser) RemoveParseListener(listener ParseTreeListener) {
 	}
 }
 
-// Remove all parse listeners.
+// RemoveParseListeners removes all parse listeners.
 func (p *BaseParser) RemoveParseListeners() {
 	p.parseListeners = nil
 }
