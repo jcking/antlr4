@@ -22,14 +22,20 @@ namespace atn {
   /// </summary>
   class ANTLR4CPP_PUBLIC LexerMoreAction final : public LexerAction {
   public:
-    /// <summary>
-    /// Provides a singleton instance of this parameterless lexer action.
-    /// </summary>
-    static const Ref<LexerMoreAction>& getInstance();
+    /// Constructs an instance of the lexer {@code more} command.
+    LexerMoreAction() = default;
+
+    LexerMoreAction(const LexerMoreAction&) = default;
+
+    LexerMoreAction(LexerMoreAction&&) = default;
+
+    LexerMoreAction& operator=(const LexerMoreAction&) = default;
+
+    LexerMoreAction& operator=(LexerMoreAction&&) = default;
 
     /// <summary>
     /// {@inheritDoc} </summary>
-    /// <returns> This method returns <seealso cref="LexerActionType#MORE"/>. </returns>
+    /// <returns> This method returns <seealso cref="LexerActionType#MODE"/>. </returns>
     virtual LexerActionType getActionType() const override;
 
     /// <summary>
@@ -42,15 +48,11 @@ namespace atn {
     ///
     /// <para>This action is implemented by calling <seealso cref="Lexer#more"/>.</para>
     /// </summary>
-    virtual void execute(Lexer *lexer) override;
+    virtual void execute(Lexer *lexer) const override;
 
     virtual size_t hashCode() const override;
-    virtual bool operator==(const LexerAction &obj) const override;
+    virtual bool equals(const LexerAction &obj) const override;
     virtual std::string toString() const override;
-
-  private:
-    /// Constructs the singleton instance of the lexer {@code more} command.
-    LexerMoreAction() = default;
   };
 
 } // namespace atn

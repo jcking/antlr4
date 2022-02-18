@@ -5,6 +5,7 @@
 
 #include "atn/RuleStopState.h"
 #include "atn/Transition.h"
+#include "atn/AnyTransition.h"
 #include "atn/RuleTransition.h"
 #include "atn/SingletonPredictionContext.h"
 #include "atn/AbstractPredicateTransition.h"
@@ -111,36 +112,36 @@ namespace {
 
       size_t n = s->transitions.size();
       for (size_t i = 0; i < n; i++) {
-        const Transition *t = s->transitions[i].get();
+        const AnyTransition &t = s->transitions[i];
 
-        if (t->getSerializationType() == Transition::RULE) {
-          if (_calledRuleStack[(static_cast<const RuleTransition*>(t))->target->ruleIndex]) {
+        if (t.getType() == TransitionType::RULE) {
+          if (_calledRuleStack[t.getTarget()->ruleIndex]) {
             continue;
           }
 
-          Ref<const PredictionContext> newContext = SingletonPredictionContext::create(ctx, (static_cast<const RuleTransition*>(t))->followState->stateNumber);
+          Ref<const PredictionContext> newContext = SingletonPredictionContext::create(ctx, t.as<RuleTransition>().getFollowState()->stateNumber);
 
-          _calledRuleStack.set((static_cast<const RuleTransition*>(t))->target->ruleIndex);
-          LOOK(t->target, stopState, newContext);
-          _calledRuleStack[(static_cast<const RuleTransition*>(t))->target->ruleIndex] = false;
+          _calledRuleStack.set(t.getTarget()->ruleIndex);
+          LOOK(t.getTarget(), stopState, newContext);
+          _calledRuleStack[t.getTarget()->ruleIndex] = false;
 
-        } else if (is<const AbstractPredicateTransition *>(t)) {
+        } else if (t.is<PredicateTransition>() || t.is<PrecedencePredicateTransition>()) {
           if (_seeThruPreds) {
-            LOOK(t->target, stopState, ctx);
+            LOOK(t.getTarget(), stopState, ctx);
           } else {
             _look.add(LL1Analyzer::HIT_PRED);
           }
-        } else if (t->isEpsilon()) {
-          LOOK(t->target, stopState, ctx);
-        } else if (t->getSerializationType() == Transition::WILDCARD) {
+        } else if (t.isEpsilon()) {
+          LOOK(t.getTarget(), stopState, ctx);
+        } else if (t.getType() == TransitionType::WILDCARD) {
           _look.addAll(misc::IntervalSet::of(Token::MIN_USER_TOKEN_TYPE, static_cast<ssize_t>(_atn.maxTokenType)));
         } else {
-          misc::IntervalSet set = t->label();
-          if (!set.isEmpty()) {
-            if (is<const NotSetTransition*>(t)) {
-              set = set.complement(misc::IntervalSet::of(Token::MIN_USER_TOKEN_TYPE, static_cast<ssize_t>(_atn.maxTokenType)));
+          if (!t.label().isEmpty()) {
+            if (t.is<NotSetTransition>()) {
+              _look.addAll(t.label().complement(misc::IntervalSet::of(Token::MIN_USER_TOKEN_TYPE, static_cast<ssize_t>(_atn.maxTokenType))));
+            } else {
+              _look.addAll(t.label());
             }
-            _look.addAll(set);
           }
         }
       }
@@ -167,7 +168,7 @@ std::vector<misc::IntervalSet> LL1Analyzer::getDecisionLookahead(ATNState *s) co
   look.resize(s->transitions.size()); // Fills all interval sets with defaults.
   for (size_t alt = 0; alt < s->transitions.size(); alt++) {
     LL1AnalyzerImpl impl(_atn, look[alt], false, false);
-    impl.LOOK(s->transitions[alt]->target, nullptr, PredictionContext::EMPTY);
+    impl.LOOK(s->transitions[alt].getTarget(), nullptr, PredictionContext::EMPTY);
     // Wipe out lookahead for this alternative if we found nothing
     // or we had a predicate when we !seeThruPreds
     if (look[alt].size() == 0 || look[alt].contains(LL1Analyzer::HIT_PRED)) {

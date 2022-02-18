@@ -8,6 +8,8 @@
 #include "PredictionMode.h"
 #include "dfa/DFAState.h"
 #include "atn/ATNSimulator.h"
+#include "atn/AnySemanticContext.h"
+#include "atn/AnyTransition.h"
 #include "atn/PredictionContext.h"
 #include "SemanticContext.h"
 #include "atn/ATNConfig.h"
@@ -348,7 +350,7 @@ namespace atn {
     bool canDropLoopEntryEdgeInLeftRecursiveRule(ATNConfig *config) const;
     virtual std::string getRuleName(size_t index);
 
-    virtual Ref<ATNConfig> precedenceTransition(Ref<ATNConfig> const& config, const PrecedencePredicateTransition *pt,
+    virtual Ref<ATNConfig> precedenceTransition(Ref<ATNConfig> const& config, const PrecedencePredicateTransition &pt,
                                                 bool collectPredicates, bool inContext, bool fullCtx);
 
     void setPredictionMode(PredictionMode newMode);
@@ -646,13 +648,13 @@ namespace atn {
      */
     std::unique_ptr<ATNConfigSet> applyPrecedenceFilter(ATNConfigSet *configs);
 
-    virtual ATNState *getReachableTarget(const Transition *trans, size_t ttype);
+    virtual ATNState *getReachableTarget(const Transition &trans, size_t ttype);
 
-    virtual std::vector<Ref<const SemanticContext>> getPredsForAmbigAlts(const antlrcpp::BitSet &ambigAlts,
+    virtual std::vector<AnySemanticContext> getPredsForAmbigAlts(const antlrcpp::BitSet &ambigAlts,
                                                                    ATNConfigSet *configs, size_t nalts);
 
-    virtual std::vector<dfa::DFAState::PredPrediction*> getPredicatePredictions(const antlrcpp::BitSet &ambigAlts,
-                                                                                std::vector<Ref<const SemanticContext>> const& altToPred);
+    virtual std::vector<dfa::DFAState::PredPrediction> getPredicatePredictions(const antlrcpp::BitSet &ambigAlts,
+                                                                              const std::vector<AnySemanticContext> &altToPred);
 
     /**
      * This method is used to improve the localization of error messages by
@@ -724,7 +726,7 @@ namespace atn {
     ///  then we stop at the first predicate that evaluates to true. This
     ///  includes pairs with null predicates.
     /// </summary>
-    virtual antlrcpp::BitSet evalSemanticContext(std::vector<dfa::DFAState::PredPrediction*> predPredictions,
+    virtual antlrcpp::BitSet evalSemanticContext(const std::vector<dfa::DFAState::PredPrediction> &predPredictions,
                                                  ParserRuleContext *outerContext, bool complete);
 
     /**
@@ -757,7 +759,7 @@ namespace atn {
      *
      * @since 4.3
      */
-    virtual bool evalSemanticContext(Ref<const SemanticContext> const& pred, ParserRuleContext *parserCallStack,
+    virtual bool evalSemanticContext(const AnySemanticContext &pred, ParserRuleContext *parserCallStack,
                                      size_t alt, bool fullCtx);
 
     /* TODO: If we are doing predicates, there is no point in pursuing
@@ -776,14 +778,14 @@ namespace atn {
     virtual void closure_(Ref<ATNConfig> const& config, ATNConfigSet *configs, ATNConfig::Set &closureBusy,
                           bool collectPredicates, bool fullCtx, int depth, bool treatEofAsEpsilon);
 
-    virtual Ref<ATNConfig> getEpsilonTarget(Ref<ATNConfig> const& config, const Transition *t, bool collectPredicates,
+    virtual Ref<ATNConfig> getEpsilonTarget(Ref<ATNConfig> const& config, const Transition &t, bool collectPredicates,
                                             bool inContext, bool fullCtx, bool treatEofAsEpsilon);
-    virtual Ref<ATNConfig> actionTransition(Ref<ATNConfig> const& config, const ActionTransition *t);
+    virtual Ref<ATNConfig> actionTransition(Ref<ATNConfig> const& config, const ActionTransition &t);
 
-    virtual Ref<ATNConfig> predTransition(Ref<ATNConfig> const& config, const PredicateTransition *pt, bool collectPredicates,
+    virtual Ref<ATNConfig> predTransition(Ref<ATNConfig> const& config, const PredicateTransition &pt, bool collectPredicates,
                                           bool inContext, bool fullCtx);
 
-    virtual Ref<ATNConfig> ruleTransition(Ref<ATNConfig> const& config, const RuleTransition *t);
+    virtual Ref<ATNConfig> ruleTransition(Ref<ATNConfig> const& config, const RuleTransition &t);
 
     /**
      * Gets a {@link BitSet} containing the alternatives in {@code configs}

@@ -38,7 +38,15 @@ namespace atn {
     /// executed. </param>
     /// <param name="action"> The lexer action to execute at a particular offset in the
     /// input <seealso cref="CharStream"/>. </param>
-    LexerIndexedCustomAction(int offset, Ref<LexerAction> action);
+    LexerIndexedCustomAction(int offset, std::shared_ptr<const LexerAction> action);
+
+    LexerIndexedCustomAction(const LexerIndexedCustomAction&) = default;
+
+    LexerIndexedCustomAction(LexerIndexedCustomAction&&) = default;
+
+    LexerIndexedCustomAction& operator=(const LexerIndexedCustomAction&) = default;
+
+    LexerIndexedCustomAction& operator=(LexerIndexedCustomAction&&) = default;
 
     /// <summary>
     /// Gets the location in the input <seealso cref="CharStream"/> at which the lexer
@@ -53,28 +61,34 @@ namespace atn {
     /// Gets the lexer action to execute.
     /// </summary>
     /// <returns> A <seealso cref="LexerAction"/> object which executes the lexer action. </returns>
-    Ref<LexerAction> getAction() const;
+    const LexerAction* getAction() const;
 
     /// <summary>
     /// {@inheritDoc}
     /// </summary>
-    /// <returns> This method returns the result of calling <seealso cref="#getActionType"/>
-    /// on the <seealso cref="LexerAction"/> returned by <seealso cref="#getAction"/>. </returns>
+    /// <returns> This method returns <seealso cref="LexerActionType#CUSTOM"/>. </returns>
     virtual LexerActionType getActionType() const override;
 
     /// <summary>
-    /// {@inheritDoc} </summary>
+    /// Gets whether the lexer action is position-dependent. Position-dependent
+    /// actions may have different semantics depending on the <seealso cref="CharStream"/>
+    /// index at the time the action is executed.
+    ///
+    /// <para>Custom actions are position-dependent since they may represent a
+    /// user-defined embedded action which makes calls to methods like
+    /// <seealso cref="Lexer#getText"/>.</para>
+    /// </summary>
     /// <returns> This method returns {@code true}. </returns>
     virtual bool isPositionDependent() const override;
 
-    virtual void execute(Lexer *lexer) override;
+    virtual void execute(Lexer *lexer) const override;
     virtual size_t hashCode() const override;
-    virtual bool operator==(const LexerAction &obj) const override;
+    virtual bool equals(const LexerAction &obj) const override;
     virtual std::string toString() const override;
 
   private:
-    const int _offset;
-    const Ref<LexerAction> _action;
+    int _offset;
+    std::shared_ptr<const LexerAction> _action;
   };
 
 } // namespace atn

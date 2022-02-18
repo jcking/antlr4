@@ -5,6 +5,7 @@
 
 #include "atn/ParserATNSimulator.h"
 #include "Parser.h"
+#include "atn/AnyTransition.h"
 #include "atn/PredicateTransition.h"
 #include "atn/ATN.h"
 #include "atn/ATNState.h"
@@ -26,10 +27,10 @@ FailedPredicateException::FailedPredicateException(Parser *recognizer, const std
                          recognizer->getInputStream(), recognizer->getContext(), recognizer->getCurrentToken()) {
 
   atn::ATNState *s = recognizer->getInterpreter<atn::ATNSimulator>()->atn.states[recognizer->getState()];
-  const atn::Transition *transition = s->transitions[0].get();
-  if (is<const atn::PredicateTransition*>(transition)) {
-    _ruleIndex = static_cast<const atn::PredicateTransition *>(transition)->ruleIndex;
-    _predicateIndex = static_cast<const atn::PredicateTransition *>(transition)->predIndex;
+  const atn::AnyTransition &transition = s->transitions[0];
+  if (transition.is<atn::PredicateTransition>()) {
+    _ruleIndex = transition.as<atn::PredicateTransition>().getRuleIndex();
+    _predicateIndex = transition.as<atn::PredicateTransition>().getPredIndex();
   } else {
     _ruleIndex = 0;
     _predicateIndex = 0;

@@ -11,22 +11,21 @@
 using namespace antlr4;
 using namespace antlr4::atn;
 
-SetTransition::SetTransition(ATNState *target, misc::IntervalSet aSet)
-  : Transition(target), set(aSet.isEmpty() ? misc::IntervalSet::of(Token::INVALID_TYPE) : std::move(aSet)) {
+SetTransition::SetTransition(ATNState *target, misc::IntervalSet set)
+    : Transition(target), _set(set.isEmpty() ? misc::IntervalSet::of(Token::INVALID_TYPE) : std::move(set)) {}
+
+TransitionType SetTransition::getType() const {
+  return TransitionType::SET;
 }
 
-Transition::SerializationType SetTransition::getSerializationType() const {
-  return SET;
-}
-
-misc::IntervalSet SetTransition::label() const {
-  return set;
+const misc::IntervalSet& SetTransition::label() const {
+  return _set;
 }
 
 bool SetTransition::matches(size_t symbol, size_t /*minVocabSymbol*/, size_t /*maxVocabSymbol*/) const {
-  return set.contains(symbol);
+  return _set.contains(symbol);
 }
 
 std::string SetTransition::toString() const {
-  return "SET " + Transition::toString() + " { set: " + set.toString() + "}";
+  return "SET " + Transition::toString() + " { set: " + _set.toString() + "}";
 }

@@ -27,6 +27,14 @@ namespace atn {
     /// <param name="channel"> The channel value to pass to <seealso cref="Lexer#setChannel"/>. </param>
     explicit LexerChannelAction(int channel);
 
+    LexerChannelAction(const LexerChannelAction&) = default;
+
+    LexerChannelAction(LexerChannelAction&&) = default;
+
+    LexerChannelAction& operator=(const LexerChannelAction&) = default;
+
+    LexerChannelAction& operator=(LexerChannelAction&&) = default;
+
     /// <summary>
     /// Gets the channel to use for the <seealso cref="Token"/> created by the lexer.
     /// </summary>
@@ -49,14 +57,14 @@ namespace atn {
     /// <para>This action is implemented by calling <seealso cref="Lexer#setChannel"/> with the
     /// value provided by <seealso cref="#getChannel"/>.</para>
     /// </summary>
-    virtual void execute(Lexer *lexer) override;
+    virtual void execute(Lexer *lexer) const override;
 
     virtual size_t hashCode() const override;
-    virtual bool operator==(const LexerAction &obj) const override;
+    virtual bool equals(const LexerAction &obj) const override;
     virtual std::string toString() const override;
 
   private:
-    const int _channel;
+    int _channel;
   };
 
 } // namespace atn

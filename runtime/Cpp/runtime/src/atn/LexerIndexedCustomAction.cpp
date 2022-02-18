@@ -13,16 +13,15 @@ using namespace antlr4;
 using namespace antlr4::atn;
 using namespace antlr4::misc;
 
-LexerIndexedCustomAction::LexerIndexedCustomAction(int offset, Ref<LexerAction> action)
-  : _offset(offset), _action(std::move(action)) {
-}
+LexerIndexedCustomAction::LexerIndexedCustomAction(int offset, std::shared_ptr<const LexerAction> action)
+    : _offset(offset), _action(std::move(action)) {}
 
 int LexerIndexedCustomAction::getOffset() const {
   return _offset;
 }
 
-Ref<LexerAction> LexerIndexedCustomAction::getAction() const {
-  return _action;
+const LexerAction* LexerIndexedCustomAction::getAction() const {
+  return _action.get();
 }
 
 LexerActionType LexerIndexedCustomAction::getActionType() const {
@@ -33,7 +32,7 @@ bool LexerIndexedCustomAction::isPositionDependent() const {
   return true;
 }
 
-void LexerIndexedCustomAction::execute(Lexer *lexer) {
+void LexerIndexedCustomAction::execute(Lexer *lexer) const {
   // assume the input stream position was properly set by the calling code
   _action->execute(lexer);
 }
@@ -45,7 +44,7 @@ size_t LexerIndexedCustomAction::hashCode() const {
   return MurmurHash::finish(hash, 2);
 }
 
-bool LexerIndexedCustomAction::operator==(const LexerAction &obj) const {
+bool LexerIndexedCustomAction::equals(const LexerAction &obj) const {
   if (&obj == this) {
     return true;
   }

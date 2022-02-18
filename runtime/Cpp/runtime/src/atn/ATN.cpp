@@ -46,23 +46,6 @@ ATN::~ATN() {
 }
 
 /**
- * Required to be defined (even though not used) as we have an explicit move assignment operator.
- */
-ATN& ATN::operator = (ATN &other) noexcept {
-  states = other.states;
-  decisionToState = other.decisionToState;
-  ruleToStartState = other.ruleToStartState;
-  ruleToStopState = other.ruleToStopState;
-  grammarType = other.grammarType;
-  maxTokenType = other.maxTokenType;
-  ruleToTokenType = other.ruleToTokenType;
-  lexerActions = other.lexerActions;
-  modeToStartState = other.modeToStartState;
-
-  return *this;
-}
-
-/**
  * Explicit move assignment operator to make this the preferred assignment. With implicit copy/move assignment
  * operators it seems the copy operator is preferred causing trouble when releasing the allocated ATNState instances.
  */
@@ -146,8 +129,7 @@ misc::IntervalSet ATN::getExpectedTokens(size_t stateNumber, RuleContext *contex
   expected.remove(Token::EPSILON);
   while (ctx && ctx->invokingState != ATNState::INVALID_STATE_NUMBER && following.contains(Token::EPSILON)) {
     ATNState *invokingState = states.at(ctx->invokingState);
-    const RuleTransition *rt = static_cast<const RuleTransition*>(invokingState->transitions[0].get());
-    following = nextTokens(rt->followState);
+    following = nextTokens(invokingState->transitions[0].as<RuleTransition>().getFollowState());
     expected.addAll(following);
     expected.remove(Token::EPSILON);
 

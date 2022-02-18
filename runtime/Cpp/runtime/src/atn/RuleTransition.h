@@ -10,30 +10,37 @@
 namespace antlr4 {
 namespace atn {
 
-  class ANTLR4CPP_PUBLIC RuleTransition : public Transition {
+  class ANTLR4CPP_PUBLIC RuleTransition final : public Transition {
   public:
-    /// Ptr to the rule definition object for this rule ref.
-    const size_t ruleIndex; // no Rule object at runtime
-
-    const int precedence;
-
-    /// What node to begin computations following ref to rule.
-    ATNState *followState;
-
-    /// @deprecated Use
-    /// <seealso cref="#RuleTransition(RuleStartState, size_t, int, ATNState)"/> instead.
-    RuleTransition(RuleStartState *ruleStart, size_t ruleIndex, ATNState *followState);
-
     RuleTransition(RuleStartState *ruleStart, size_t ruleIndex, int precedence, ATNState *followState);
-    RuleTransition(RuleTransition const&) = delete;
-    RuleTransition& operator=(RuleTransition const&) = delete;
 
-    virtual SerializationType getSerializationType() const override;
+    RuleTransition(const RuleTransition&) = default;
+
+    RuleTransition(RuleTransition&&) = default;
+
+    RuleTransition& operator=(const RuleTransition&) = default;
+
+    RuleTransition& operator=(RuleTransition&&) = default;
+
+    constexpr size_t getRuleIndex() const { return _ruleIndex; }
+
+    constexpr ATNState* getFollowState() const { return _followState; }
+
+    constexpr int getPrecedence() const { return _precedence; }
+
+    virtual TransitionType getType() const override;
 
     virtual bool isEpsilon() const override;
     virtual bool matches(size_t symbol, size_t minVocabSymbol, size_t maxVocabSymbol) const override;
 
+    bool equals(const Transition &other) const override;
+
     virtual std::string toString() const override;
+
+  private:
+    size_t _ruleIndex;
+    ATNState *_followState;
+    int _precedence;
   };
 
 } // namespace atn

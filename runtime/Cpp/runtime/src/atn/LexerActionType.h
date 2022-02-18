@@ -16,11 +16,11 @@ namespace atn {
   /// @author Sam Harwell
   /// @since 4.2
   /// </summary>
-  enum class LexerActionType : size_t {
+  enum class LexerActionType : uint8_t {
     /// <summary>
     /// The type of a <seealso cref="LexerChannelAction"/> action.
     /// </summary>
-    CHANNEL,
+    CHANNEL = 0,
     /// <summary>
     /// The type of a <seealso cref="LexerCustomAction"/> action.
     /// </summary>

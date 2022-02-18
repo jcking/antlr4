@@ -10,6 +10,7 @@
 #include "tree/TerminalNode.h"
 #include "tree/ErrorNodeImpl.h"
 #include "Lexer.h"
+#include "atn/AnyTransition.h"
 #include "atn/ParserATNSimulator.h"
 #include "misc/IntervalSet.h"
 #include "atn/RuleStartState.h"
@@ -484,8 +485,7 @@ bool Parser::isExpectedToken(size_t symbol) {
 
   while (ctx && ctx->invokingState != ATNState::INVALID_STATE_NUMBER && following.contains(Token::EPSILON)) {
     atn::ATNState *invokingState = atn.states[ctx->invokingState];
-    const atn::RuleTransition *rt = static_cast<const atn::RuleTransition*>(invokingState->transitions[0].get());
-    following = atn.nextTokens(rt->followState);
+    following = atn.nextTokens(invokingState->transitions[0].as<atn::RuleTransition>().getFollowState());
     if (following.contains(symbol)) {
       return true;
     }

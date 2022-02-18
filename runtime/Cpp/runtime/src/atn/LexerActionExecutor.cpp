@@ -15,45 +15,43 @@ using namespace antlr4::atn;
 using namespace antlr4::misc;
 using namespace antlrcpp;
 
-LexerActionExecutor::LexerActionExecutor(std::vector<Ref<LexerAction>> lexerActions)
+LexerActionExecutor::LexerActionExecutor(std::vector<AnyLexerAction> lexerActions)
   : _lexerActions(std::move(lexerActions)), _hashCode(generateHashCode()) {
 }
 
-Ref<LexerActionExecutor> LexerActionExecutor::append(Ref<LexerActionExecutor> const& lexerActionExecutor,
-                                                     Ref<LexerAction> lexerAction) {
-  if (lexerActionExecutor == nullptr) {
-    return std::make_shared<LexerActionExecutor>(std::vector<Ref<LexerAction>> { std::move(lexerAction) });
-  }
-
-  std::vector<Ref<LexerAction>> lexerActions = lexerActionExecutor->_lexerActions; // Make a copy.
-  lexerActions.push_back(std::move(lexerAction));
-  return std::make_shared<LexerActionExecutor>(std::move(lexerActions));
+LexerActionExecutor LexerActionExecutor::append(const LexerActionExecutor &lexerActionExecutor, AnyLexerAction anyLexerAction) {
+  std::vector<AnyLexerAction> lexerActions;
+  lexerActions.reserve(lexerActionExecutor._lexerActions.size() + 1);
+  lexerActions.insert(lexerActions.end(), lexerActionExecutor._lexerActions.begin(), lexerActionExecutor._lexerActions.end());
+  lexerActions.push_back(std::move(anyLexerAction));
+  lexerActions.shrink_to_fit();
+  return LexerActionExecutor(std::move(lexerActions));
 }
 
-Ref<LexerActionExecutor> LexerActionExecutor::fixOffsetBeforeMatch(int offset) {
-  std::vector<Ref<LexerAction>> updatedLexerActions;
+std::optional<LexerActionExecutor> LexerActionExecutor::fixOffsetBeforeMatch(int offset) const {
+  std::vector<AnyLexerAction> updatedLexerActions;
   for (size_t i = 0; i < _lexerActions.size(); i++) {
-    if (_lexerActions[i]->isPositionDependent() && !is<LexerIndexedCustomAction>(_lexerActions[i])) {
+    if (_lexerActions[i].isPositionDependent() && !_lexerActions[i].is<LexerIndexedCustomAction>()) {
       if (updatedLexerActions.empty()) {
         updatedLexerActions = _lexerActions; // Make a copy.
       }
 
-      updatedLexerActions[i] = std::make_shared<LexerIndexedCustomAction>(offset, _lexerActions[i]);
+      updatedLexerActions[i] = AnyLexerAction(LexerIndexedCustomAction(offset, _lexerActions[i].getShared()));
     }
   }
 
   if (updatedLexerActions.empty()) {
-    return shared_from_this();
+    return std::nullopt;
   }
 
-  return std::make_shared<LexerActionExecutor>(std::move(updatedLexerActions));
+  return LexerActionExecutor(std::move(updatedLexerActions));
 }
 
-const std::vector<Ref<LexerAction>>& LexerActionExecutor::getLexerActions() const {
+const std::vector<AnyLexerAction>& LexerActionExecutor::getLexerActions() const {
   return _lexerActions;
 }
 
-void LexerActionExecutor::execute(Lexer *lexer, CharStream *input, size_t startIndex) {
+void LexerActionExecutor::execute(Lexer *lexer, CharStream *input, size_t startIndex) const {
   bool requiresSeek = false;
   size_t stopIndex = input->index();
 
@@ -62,18 +60,16 @@ void LexerActionExecutor::execute(Lexer *lexer, CharStream *input, size_t startI
       input->seek(stopIndex);
     }
   });
-  for (auto lexerAction : _lexerActions) {
-    if (is<LexerIndexedCustomAction>(lexerAction)) {
-      int offset = (std::static_pointer_cast<LexerIndexedCustomAction>(lexerAction))->getOffset();
+  for (const auto &lexerAction : _lexerActions) {
+    if (lexerAction.is<LexerIndexedCustomAction>()) {
+      int offset = lexerAction.as<LexerIndexedCustomAction>().getOffset();
       input->seek(startIndex + offset);
-      lexerAction = std::static_pointer_cast<LexerIndexedCustomAction>(lexerAction)->getAction();
       requiresSeek = (startIndex + offset) != stopIndex;
-    } else if (lexerAction->isPositionDependent()) {
+    } else if (lexerAction.isPositionDependent()) {
       input->seek(stopIndex);
       requiresSeek = false;
     }
-
-    lexerAction->execute(lexer);
+    lexerAction.execute(lexer);
   }
 }
 
@@ -81,16 +77,12 @@ size_t LexerActionExecutor::hashCode() const {
   return _hashCode;
 }
 
-bool LexerActionExecutor::operator==(const LexerActionExecutor &obj) const {
-  if (&obj == this) {
+bool LexerActionExecutor::equals(const LexerActionExecutor &other) const {
+  if (&other == this) {
     return true;
   }
 
-  return _hashCode == obj._hashCode && Arrays::equals(_lexerActions, obj._lexerActions);
-}
-
-bool LexerActionExecutor::operator!=(const LexerActionExecutor &obj) const {
-  return !operator==(obj);
+  return _hashCode == other._hashCode && Arrays::equals(_lexerActions, other._lexerActions);
 }
 
 size_t LexerActionExecutor::generateHashCode() const {

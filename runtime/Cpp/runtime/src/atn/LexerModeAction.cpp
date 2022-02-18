@@ -12,8 +12,7 @@ using namespace antlr4;
 using namespace antlr4::atn;
 using namespace antlr4::misc;
 
-LexerModeAction::LexerModeAction(int mode) : _mode(mode) {
-}
+LexerModeAction::LexerModeAction(int mode) : _mode(mode) {}
 
 int LexerModeAction::getMode() const {
   return _mode;
@@ -27,7 +26,7 @@ bool LexerModeAction::isPositionDependent() const {
   return false;
 }
 
-void LexerModeAction::execute(Lexer *lexer) {
+void LexerModeAction::execute(Lexer *lexer) const {
   lexer->setMode(_mode);
 }
 
@@ -38,7 +37,7 @@ size_t LexerModeAction::hashCode() const {
   return MurmurHash::finish(hash, 2);
 }
 
-bool LexerModeAction::operator==(const LexerAction &obj) const {
+bool LexerModeAction::equals(const LexerAction &obj) const {
   if (&obj == this) {
     return true;
   }

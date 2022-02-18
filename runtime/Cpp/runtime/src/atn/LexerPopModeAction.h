@@ -22,14 +22,20 @@ namespace atn {
   /// </summary>
   class ANTLR4CPP_PUBLIC LexerPopModeAction final : public LexerAction {
   public:
-    /// <summary>
-    /// Provides a singleton instance of this parameterless lexer action.
-    /// </summary>
-    static const Ref<LexerPopModeAction>& getInstance();
+    /// Constructs an instance of the lexer {@code popMode} command.
+    LexerPopModeAction() = default;
+
+    LexerPopModeAction(const LexerPopModeAction&) = default;
+
+    LexerPopModeAction(LexerPopModeAction&&) = default;
+
+    LexerPopModeAction& operator=(const LexerPopModeAction&) = default;
+
+    LexerPopModeAction& operator=(LexerPopModeAction&&) = default;
 
     /// <summary>
     /// {@inheritDoc} </summary>
-    /// <returns> This method returns <seealso cref="LexerActionType#POP_MODE"/>. </returns>
+    /// <returns> This method returns <seealso cref="LexerActionType#MODE"/>. </returns>
     virtual LexerActionType getActionType() const override;
 
     /// <summary>
@@ -42,15 +48,11 @@ namespace atn {
     ///
     /// <para>This action is implemented by calling <seealso cref="Lexer#popMode"/>.</para>
     /// </summary>
-    virtual void execute(Lexer *lexer) override;
+    virtual void execute(Lexer *lexer) const override;
 
     virtual size_t hashCode() const override;
-    virtual bool operator==(const LexerAction &obj) const override;
+    virtual bool equals(const LexerAction &obj) const override;
     virtual std::string toString() const override;
-
-  private:
-    /// Constructs the singleton instance of the lexer {@code popMode} command.
-    LexerPopModeAction() = default;
   };
 
 } // namespace atn

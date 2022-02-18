@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include "atn/TransitionType.h"
 #include "misc/IntervalSet.h"
 
 namespace antlr4 {
@@ -25,33 +26,21 @@ namespace atn {
   /// </summary>
   class ANTLR4CPP_PUBLIC Transition {
   public:
-    // constants for serialization
-    enum SerializationType {
-      EPSILON = 1,
-      RANGE = 2,
-      RULE = 3,
-      PREDICATE = 4, // e.g., {isType(input.LT(1))}?
-      ATOM = 5,
-      ACTION = 6,
-      SET = 7, // ~(A|B) or ~atom, wildcard, which convert to next 2
-      NOT_SET = 8,
-      WILDCARD = 9,
-      PRECEDENCE = 10,
-    };
+    Transition(const Transition&) = default;
 
-    static const std::vector<std::string> serializationNames;
-
-    /// The target of this transition.
-    // ml: this is a reference into the ATN.
-    ATNState *target;
+    Transition(Transition&&) = default;
 
     virtual ~Transition() = default;
 
-  protected:
-    explicit Transition(ATNState *target);
+    Transition& operator=(const Transition&) = default;
 
-  public:
-    virtual SerializationType getSerializationType() const = 0;
+    Transition& operator=(Transition&&) = default;
+
+    void setTarget(ATNState* target);
+
+    constexpr ATNState* getTarget() const { return _target; }
+
+    virtual TransitionType getType() const = 0;
 
     /**
      * Determines if the transition is an "epsilon" transition.
@@ -63,16 +52,25 @@ namespace atn {
      * transition consumes (matches) an input symbol.
      */
     virtual bool isEpsilon() const;
-    virtual misc::IntervalSet label() const;
+    virtual const misc::IntervalSet& label() const;
     virtual bool matches(size_t symbol, size_t minVocabSymbol, size_t maxVocabSymbol) const = 0;
+
+    virtual bool equals(const Transition &other) const;
 
     virtual std::string toString() const;
 
-    Transition(Transition const&) = delete;
-    Transition& operator=(Transition const&) = delete;
+  protected:
+    explicit Transition(ATNState *target);
+
+  private:
+    /// The target of this transition.
+    // ml: this is a reference into the ATN.
+    ATNState *_target;
   };
 
-  using ConstTransitionPtr = std::unique_ptr<const Transition>;
+  inline bool operator==(const Transition &lhs, const Transition &rhs) { return lhs.equals(rhs); }
+
+  inline bool operator!=(const Transition &lhs, const Transition &rhs) { return !operator==(lhs, rhs); }
 
 } // namespace atn
 } // namespace antlr4

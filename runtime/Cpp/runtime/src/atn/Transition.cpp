@@ -3,39 +3,41 @@
  * can be found in the LICENSE.txt file in the project root.
  */
 
+#include "atn/Transition.h"
+
 #include "Exceptions.h"
 #include "support/Arrays.h"
 
-#include "atn/Transition.h"
-
 using namespace antlr4;
 using namespace antlr4::atn;
-
 using namespace antlrcpp;
 
-const std::vector<std::string> Transition::serializationNames = {
-  "INVALID", "EPSILON", "RANGE", "RULE", "PREDICATE", "ATOM", "ACTION", "SET", "NOT_SET", "WILDCARD", "PRECEDENCE"
-};
-
 Transition::Transition(ATNState *target) {
+  setTarget(target);
+}
+
+void Transition::setTarget(ATNState *target) {
   if (target == nullptr) {
     throw NullPointerException("target cannot be null.");
   }
-
-  this->target = target;
+  _target = target;
 }
 
 bool Transition::isEpsilon() const {
   return false;
 }
 
-misc::IntervalSet Transition::label() const {
+const misc::IntervalSet& Transition::label() const {
   return misc::IntervalSet::EMPTY_SET;
+}
+
+bool Transition::equals(const Transition &other) const {
+  return getType() == other.getType() && getTarget() == other.getTarget() && isEpsilon() == other.isEpsilon() && label() == other.label();
 }
 
 std::string Transition::toString() const {
   std::stringstream ss;
-  ss << "(Transition " << std::hex << this << ", target: " << std::hex << target << ')';
+  ss << "(Transition " << std::hex << this << ", target: " << std::hex << getTarget() << ')';
 
   return ss.str();
 }

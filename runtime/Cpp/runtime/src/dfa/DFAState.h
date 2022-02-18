@@ -7,6 +7,9 @@
 
 #include "antlr4-common.h"
 
+#include "atn/LexerActionExecutor.h"
+#include "atn/AnySemanticContext.h"
+
 namespace antlr4 {
 namespace dfa {
 
@@ -39,10 +42,18 @@ namespace dfa {
   public:
     class PredPrediction final {
     public:
-      Ref<const atn::SemanticContext> pred; // never null; at least SemanticContext.NONE
+      atn::AnySemanticContext pred; // never null; at least SemanticContext.NONE
       int alt;
 
-      PredPrediction(Ref<const atn::SemanticContext> pred, int alt);
+      PredPrediction(atn::AnySemanticContext pred, int alt);
+
+      PredPrediction(const PredPrediction&) = default;
+
+      PredPrediction(PredPrediction&&) = default;
+
+      PredPrediction& operator=(const PredPrediction&) = default;
+
+      PredPrediction& operator=(PredPrediction&&) = default;
 
       std::string toString() const;
     };
@@ -64,7 +75,7 @@ namespace dfa {
     /// <seealso cref="#requiresFullContext"/>.
     size_t prediction;
 
-    Ref<atn::LexerActionExecutor> lexerActionExecutor;
+    atn::LexerActionExecutor lexerActionExecutor;
 
     /// <summary>
     /// Indicates that this state was created during SLL prediction that
@@ -87,13 +98,14 @@ namespace dfa {
     /// <p/>
     ///  This list is computed by <seealso cref="ParserATNSimulator#predicateDFAState"/>.
     /// </summary>
-    std::vector<PredPrediction *> predicates;
+    std::vector<PredPrediction> predicates;
 
     /// Map a predicate to a predicted alternative.
     DFAState();
+
     explicit DFAState(int state);
+
     explicit DFAState(std::unique_ptr<atn::ATNConfigSet> configs);
-    ~DFAState();
 
     /// <summary>
     /// Get the set of all alts mentioned by all ATN configurations in this

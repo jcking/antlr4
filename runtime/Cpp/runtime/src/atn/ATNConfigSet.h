@@ -10,6 +10,7 @@
 #include "support/BitSet.h"
 #include "atn/PredictionContext.h"
 #include "atn/ATNConfig.h"
+#include "atn/AnySemanticContext.h"
 
 namespace antlr4 {
 namespace atn {
@@ -79,7 +80,7 @@ namespace atn {
      * @since 4.3
      */
     antlrcpp::BitSet getAlts() const;
-    std::vector<Ref<const SemanticContext>> getPredicates() const;
+    std::vector<AnySemanticContext> getPredicates() const;
 
     const Ref<ATNConfig>& get(size_t i) const;
 

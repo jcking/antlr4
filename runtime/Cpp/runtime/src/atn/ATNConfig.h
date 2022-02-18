@@ -9,6 +9,7 @@
 
 #include "antlr4-common.h"
 #include "atn/SemanticContext.h"
+#include "atn/AnySemanticContext.h"
 
 namespace antlr4 {
 namespace atn {
@@ -85,16 +86,16 @@ namespace atn {
     size_t reachesIntoOuterContext = 0;
 
     /// Can be shared between multiple ATNConfig instances.
-    Ref<const SemanticContext> semanticContext;
+    AnySemanticContext semanticContext;
 
     ATNConfig(ATNState *state, size_t alt, Ref<const PredictionContext> context);
-    ATNConfig(ATNState *state, size_t alt, Ref<const PredictionContext> context, Ref<const SemanticContext> semanticContext);
+    ATNConfig(ATNState *state, size_t alt, Ref<const PredictionContext> context, AnySemanticContext semanticContext);
 
-    ATNConfig(ATNConfig const& other, Ref<const SemanticContext> semanticContext);
+    ATNConfig(ATNConfig const& other, AnySemanticContext semanticContext);
     ATNConfig(ATNConfig const& other, ATNState *state);
-    ATNConfig(ATNConfig const& other, ATNState *state, Ref<const SemanticContext> semanticContext);
+    ATNConfig(ATNConfig const& other, ATNState *state, AnySemanticContext semanticContext);
     ATNConfig(ATNConfig const& other, ATNState *state, Ref<const PredictionContext> context);
-    ATNConfig(ATNConfig const& other, ATNState *state, Ref<const PredictionContext> context, Ref<const SemanticContext> semanticContext);
+    ATNConfig(ATNConfig const& other, ATNState *state, Ref<const PredictionContext> context, AnySemanticContext semanticContext);
 
     ATNConfig(ATNConfig const&) = default;
 
@@ -123,7 +124,7 @@ namespace atn {
     std::string toString(bool showAlt) const;
 
   private:
-    ATNConfig(ATNState *state, size_t alt, Ref<const PredictionContext> context, size_t reachesIntoOuterContext, Ref<const SemanticContext> semanticContext);
+    ATNConfig(ATNState *state, size_t alt, Ref<const PredictionContext> context, size_t reachesIntoOuterContext, AnySemanticContext semanticContext);
   };
 
 } // namespace atn

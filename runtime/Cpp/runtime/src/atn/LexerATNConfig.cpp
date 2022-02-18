@@ -19,13 +19,13 @@ using namespace antlrcpp;
 LexerATNConfig::LexerATNConfig(ATNState *state, int alt, Ref<const PredictionContext> context)
     : ATNConfig(state, alt, std::move(context)) {}
 
-LexerATNConfig::LexerATNConfig(ATNState *state, int alt, Ref<const PredictionContext> context, Ref<LexerActionExecutor> lexerActionExecutor)
+LexerATNConfig::LexerATNConfig(ATNState *state, int alt, Ref<const PredictionContext> context, LexerActionExecutor lexerActionExecutor)
     : ATNConfig(state, alt, std::move(context)), _lexerActionExecutor(std::move(lexerActionExecutor)) {}
 
 LexerATNConfig::LexerATNConfig(LexerATNConfig const& other, ATNState *state)
     : ATNConfig(other, state), _lexerActionExecutor(other._lexerActionExecutor), _passedThroughNonGreedyDecision(checkNonGreedyDecision(other, state)) {}
 
-LexerATNConfig::LexerATNConfig(LexerATNConfig const& other, ATNState *state, Ref<LexerActionExecutor> lexerActionExecutor)
+LexerATNConfig::LexerATNConfig(LexerATNConfig const& other, ATNState *state, LexerActionExecutor lexerActionExecutor)
     : ATNConfig(other, state), _lexerActionExecutor(std::move(lexerActionExecutor)), _passedThroughNonGreedyDecision(checkNonGreedyDecision(other, state)) {}
 
 LexerATNConfig::LexerATNConfig(LexerATNConfig const& other, ATNState *state, Ref<const PredictionContext> context)
@@ -51,11 +51,8 @@ bool LexerATNConfig::operator==(const LexerATNConfig& other) const
   if (_passedThroughNonGreedyDecision != other._passedThroughNonGreedyDecision)
     return false;
 
-  if (_lexerActionExecutor == nullptr)
-    return other._lexerActionExecutor == nullptr;
-  if (*_lexerActionExecutor != *(other._lexerActionExecutor)) {
+  if (_lexerActionExecutor != other._lexerActionExecutor)
     return false;
-  }
 
   return ATNConfig::operator==(other);
 }

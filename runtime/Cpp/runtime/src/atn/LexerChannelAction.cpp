@@ -26,7 +26,7 @@ bool LexerChannelAction::isPositionDependent() const {
   return false;
 }
 
-void LexerChannelAction::execute(Lexer *lexer) {
+void LexerChannelAction::execute(Lexer *lexer) const {
   lexer->setChannel(_channel);
 }
 
@@ -37,7 +37,7 @@ size_t LexerChannelAction::hashCode() const {
   return MurmurHash::finish(hash, 2);
 }
 
-bool LexerChannelAction::operator==(const LexerAction &obj) const {
+bool LexerChannelAction::equals(const LexerAction &obj) const {
   if (&obj == this) {
     return true;
   }

@@ -25,6 +25,14 @@ namespace atn {
     /// <param name="mode"> The mode value to pass to <seealso cref="Lexer#mode"/>. </param>
     explicit LexerModeAction(int mode);
 
+    LexerModeAction(const LexerModeAction&) = default;
+
+    LexerModeAction(LexerModeAction&&) = default;
+
+    LexerModeAction& operator=(const LexerModeAction&) = default;
+
+    LexerModeAction& operator=(LexerModeAction&&) = default;
+
     /// <summary>
     /// Get the lexer mode this action should transition the lexer to.
     /// </summary>
@@ -47,14 +55,14 @@ namespace atn {
     /// <para>This action is implemented by calling <seealso cref="Lexer#mode"/> with the
     /// value provided by <seealso cref="#getMode"/>.</para>
     /// </summary>
-    virtual void execute(Lexer *lexer) override;
+    virtual void execute(Lexer *lexer) const override;
 
     virtual size_t hashCode() const override;
-    virtual bool operator == (const LexerAction &obj) const override;
+    virtual bool equals(const LexerAction &obj) const override;
     virtual std::string toString() const override;
 
   private:
-    const int _mode;
+    int _mode;
   };
 
 } // namespace atn

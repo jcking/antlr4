@@ -12,17 +12,29 @@ namespace atn {
 
   class ANTLR4CPP_PUBLIC RangeTransition final : public Transition {
   public:
-    const size_t from;
-    const size_t to;
-
     RangeTransition(ATNState *target, size_t from, size_t to);
 
-    virtual SerializationType getSerializationType() const override;
+    RangeTransition(const RangeTransition&) = default;
 
-    virtual misc::IntervalSet label() const override;
+    RangeTransition(RangeTransition&&) = default;
+
+    RangeTransition& operator=(const RangeTransition&) = default;
+
+    RangeTransition& operator=(RangeTransition&&) = default;
+
+    size_t getFrom() const { return static_cast<size_t>(_range.getMinElement()); }
+
+    size_t getTo() const { return static_cast<size_t>(_range.getMaxElement()); }
+
+    virtual TransitionType getType() const override;
+
+    virtual const misc::IntervalSet& label() const override;
     virtual bool matches(size_t symbol, size_t minVocabSymbol, size_t maxVocabSymbol) const override;
 
     virtual std::string toString() const override;
+
+  private:
+    misc::IntervalSet _range;
   };
 
 } // namespace atn

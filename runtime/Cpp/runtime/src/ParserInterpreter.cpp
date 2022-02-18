@@ -11,6 +11,7 @@
 #include "atn/LoopEndState.h"
 #include "FailedPredicateException.h"
 #include "atn/StarLoopEntryState.h"
+#include "atn/AnyTransition.h"
 #include "atn/AtomTransition.h"
 #include "atn/RuleTransition.h"
 #include "atn/PredicateTransition.h"
@@ -152,12 +153,12 @@ void ParserInterpreter::visitState(atn::ATNState *p) {
     predictedAlt = visitDecisionState(dynamic_cast<DecisionState *>(p));
   }
 
-  const atn::Transition *transition = p->transitions[predictedAlt - 1].get();
-  switch (transition->getSerializationType()) {
-    case atn::Transition::EPSILON:
+  const atn::AnyTransition &transition = p->transitions[predictedAlt - 1];
+  switch (transition.getType()) {
+    case atn::TransitionType::EPSILON:
       if (p->getStateType() == ATNState::STAR_LOOP_ENTRY &&
         (dynamic_cast<StarLoopEntryState *>(p))->isPrecedenceDecision &&
-        !is<LoopEndState *>(transition->target)) {
+        !is<LoopEndState *>(transition.getTarget())) {
         // We are at the start of a left recursive rule's (...)* loop
         // and we're not taking the exit branch of loop.
         InterpreterRuleContext *localctx = createInterpreterRuleContext(_parentContextStack.top().first,
@@ -166,56 +167,54 @@ void ParserInterpreter::visitState(atn::ATNState *p) {
       }
       break;
 
-    case atn::Transition::ATOM:
-      match(static_cast<int>(static_cast<const atn::AtomTransition*>(transition)->_label));
+    case atn::TransitionType::ATOM:
+      match(static_cast<int>(transition.as<atn::AtomTransition>().label().getSingleElement()));
       break;
 
-    case atn::Transition::RANGE:
-    case atn::Transition::SET:
-    case atn::Transition::NOT_SET:
-      if (!transition->matches(static_cast<int>(_input->LA(1)), Token::MIN_USER_TOKEN_TYPE, Lexer::MAX_CHAR_VALUE)) {
+    case atn::TransitionType::RANGE:
+    case atn::TransitionType::SET:
+    case atn::TransitionType::NOT_SET:
+      if (!transition.matches(static_cast<int>(_input->LA(1)), Token::MIN_USER_TOKEN_TYPE, Lexer::MAX_CHAR_VALUE)) {
         recoverInline();
       }
       matchWildcard();
       break;
 
-    case atn::Transition::WILDCARD:
+    case atn::TransitionType::WILDCARD:
       matchWildcard();
       break;
 
-    case atn::Transition::RULE:
+    case atn::TransitionType::RULE:
     {
-      atn::RuleStartState *ruleStartState = static_cast<atn::RuleStartState*>(transition->target);
+      atn::RuleStartState *ruleStartState = static_cast<atn::RuleStartState*>(transition.getTarget());
       size_t ruleIndex = ruleStartState->ruleIndex;
       InterpreterRuleContext *newctx = createInterpreterRuleContext(_ctx, p->stateNumber, ruleIndex);
       if (ruleStartState->isLeftRecursiveRule) {
-        enterRecursionRule(newctx, ruleStartState->stateNumber, ruleIndex, static_cast<const atn::RuleTransition*>(transition)->precedence);
+        enterRecursionRule(newctx, ruleStartState->stateNumber, ruleIndex, transition.as<atn::RuleTransition>().getPrecedence());
       } else {
-        enterRule(newctx, transition->target->stateNumber, ruleIndex);
+        enterRule(newctx, transition.getTarget()->stateNumber, ruleIndex);
       }
     }
       break;
 
-    case atn::Transition::PREDICATE:
+    case atn::TransitionType::PREDICATE:
     {
-      const atn::PredicateTransition *predicateTransition = static_cast<const atn::PredicateTransition*>(transition);
-      if (!sempred(_ctx, predicateTransition->ruleIndex, predicateTransition->predIndex)) {
+      if (!sempred(_ctx, transition.as<atn::PredicateTransition>().getRuleIndex(), transition.as<atn::PredicateTransition>().getPredIndex())) {
         throw FailedPredicateException(this);
       }
     }
       break;
 
-    case atn::Transition::ACTION:
+    case atn::TransitionType::ACTION:
     {
-      const atn::ActionTransition *actionTransition = static_cast<const atn::ActionTransition*>(transition);
-      action(_ctx, actionTransition->ruleIndex, actionTransition->actionIndex);
+      action(_ctx, transition.as<atn::ActionTransition>().getRuleIndex(), transition.as<atn::ActionTransition>().getActionIndex());
     }
       break;
 
-    case atn::Transition::PRECEDENCE:
+    case atn::TransitionType::PRECEDENCE:
     {
-      if (!precpred(_ctx, static_cast<const atn::PrecedencePredicateTransition*>(transition)->precedence)) {
-        throw FailedPredicateException(this, "precpred(_ctx, " + std::to_string(static_cast<const atn::PrecedencePredicateTransition*>(transition)->precedence) +  ")");
+      if (!precpred(_ctx, transition.as<atn::PrecedencePredicateTransition>().getPrecedence())) {
+        throw FailedPredicateException(this, "precpred(_ctx, " + std::to_string(transition.as<atn::PrecedencePredicateTransition>().getPrecedence()) +  ")");
       }
     }
       break;
@@ -224,7 +223,7 @@ void ParserInterpreter::visitState(atn::ATNState *p) {
       throw UnsupportedOperationException("Unrecognized ATN transition type.");
   }
 
-  setState(transition->target->stateNumber);
+  setState(transition.getTarget()->stateNumber);
 }
 
 size_t ParserInterpreter::visitDecisionState(DecisionState *p) {
@@ -259,8 +258,7 @@ void ParserInterpreter::visitRuleStopState(atn::ATNState *p) {
     exitRule();
   }
 
-  const atn::RuleTransition *ruleTransition = static_cast<const atn::RuleTransition*>(_atn.states[getState()]->transitions[0].get());
-  setState(ruleTransition->followState->stateNumber);
+  setState(_atn.states[getState()]->transitions[0].as<atn::RuleTransition>().getFollowState()->stateNumber);
 }
 
 void ParserInterpreter::recover(RecognitionException &e) {

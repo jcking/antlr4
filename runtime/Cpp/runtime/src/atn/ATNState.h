@@ -7,6 +7,7 @@
 
 #include "misc/IntervalSet.h"
 #include "atn/Transition.h"
+#include "atn/AnyTransition.h"
 
 namespace antlr4 {
 namespace atn {
@@ -106,7 +107,7 @@ namespace atn {
     bool epsilonOnlyTransitions = false;
 
     /// Track the transitions emanating from this ATN state.
-    std::vector<ConstTransitionPtr> transitions;
+    std::vector<AnyTransition> transitions;
 
     ATNState() = default;
 
@@ -122,9 +123,9 @@ namespace atn {
 
     static const std::vector<std::string> serializationNames;
 
-    void addTransition(ConstTransitionPtr e);
-    void addTransition(size_t index, ConstTransitionPtr e);
-    ConstTransitionPtr removeTransition(size_t index);
+    void addTransition(AnyTransition e);
+    void addTransition(size_t index, AnyTransition e);
+    AnyTransition removeTransition(size_t index);
 
     virtual size_t hashCode() const;
     virtual bool equals(const ATNState &other) const;

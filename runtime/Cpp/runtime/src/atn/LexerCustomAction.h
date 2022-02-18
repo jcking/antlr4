@@ -36,6 +36,14 @@ namespace atn {
     /// <seealso cref="Recognizer#action"/>. </param>
     LexerCustomAction(size_t ruleIndex, size_t actionIndex);
 
+    LexerCustomAction(const LexerCustomAction&) = default;
+
+    LexerCustomAction(LexerCustomAction&&) = default;
+
+    LexerCustomAction& operator=(const LexerCustomAction&) = default;
+
+    LexerCustomAction& operator=(LexerCustomAction&&) = default;
+
     /// <summary>
     /// Gets the rule index to use for calls to <seealso cref="Recognizer#action"/>.
     /// </summary>
@@ -72,15 +80,15 @@ namespace atn {
     /// <para>Custom actions are implemented by calling <seealso cref="Lexer#action"/> with the
     /// appropriate rule and action indexes.</para>
     /// </summary>
-    virtual void execute(Lexer *lexer) override;
+    virtual void execute(Lexer *lexer) const override;
 
     virtual size_t hashCode() const override;
-    virtual bool operator == (const LexerAction &obj) const override;
+    virtual bool equals(const LexerAction &obj) const override;
     virtual std::string toString() const override;
 
   private:
-    const size_t _ruleIndex;
-    const size_t _actionIndex;
+    size_t _ruleIndex;
+    size_t _actionIndex;
   };
 
 } // namespace atn

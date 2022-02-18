@@ -43,7 +43,7 @@ bool ATNConfigSet::add(const Ref<ATNConfig> &config, PredictionContextMergeCache
   if (_readonly) {
     throw IllegalStateException("This set is readonly");
   }
-  if (config->semanticContext != SemanticContext::NONE) {
+  if (config->semanticContext != SemanticContext::none()) {
     hasSemanticContext = true;
   }
   if (config->getOuterContextDepth() > 0) {
@@ -110,11 +110,11 @@ BitSet ATNConfigSet::getAlts() const {
   return alts;
 }
 
-std::vector<Ref<const SemanticContext>> ATNConfigSet::getPredicates() const {
-  std::vector<Ref<const SemanticContext>> preds;
+std::vector<AnySemanticContext> ATNConfigSet::getPredicates() const {
+  std::vector<AnySemanticContext> preds;
   preds.reserve(configs.size());
   for (const auto &c : configs) {
-    if (c->semanticContext != SemanticContext::NONE) {
+    if (c->semanticContext != SemanticContext::none()) {
       preds.push_back(c->semanticContext);
     }
   }
@@ -223,10 +223,10 @@ size_t ATNConfigSet::hashCode(const ATNConfig &other) const {
   size_t hashCode = 7;
   hashCode = 31 * hashCode + other.state->stateNumber;
   hashCode = 31 * hashCode + other.alt;
-  hashCode = 31 * hashCode + other.semanticContext->hashCode();
+  hashCode = 31 * hashCode + other.semanticContext.hashCode();
   return hashCode;
 }
 
 bool ATNConfigSet::equals(const ATNConfig &lhs, const ATNConfig &rhs) const {
-  return lhs.state->stateNumber == rhs.state->stateNumber && lhs.alt == rhs.alt && *lhs.semanticContext == *rhs.semanticContext;
+  return lhs.state->stateNumber == rhs.state->stateNumber && lhs.alt == rhs.alt && lhs.semanticContext == rhs.semanticContext;
 }

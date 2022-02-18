@@ -4,14 +4,16 @@
  */
 
 #include "atn/PredicateTransition.h"
+#include "support/Casts.h"
 
 using namespace antlr4::atn;
+using namespace antlrcpp;
 
-PredicateTransition::PredicateTransition(ATNState *target, size_t ruleIndex, size_t predIndex, bool isCtxDependent) : AbstractPredicateTransition(target), ruleIndex(ruleIndex), predIndex(predIndex), isCtxDependent(isCtxDependent) {
-}
+PredicateTransition::PredicateTransition(ATNState *target, size_t ruleIndex, size_t predIndex, bool isCtxDependent)
+    : AbstractPredicateTransition(target), _ruleIndex(ruleIndex), _predIndex(predIndex), _isCtxDependent(isCtxDependent) {}
 
-Transition::SerializationType PredicateTransition::getSerializationType() const {
-  return PREDICATE;
+TransitionType PredicateTransition::getType() const {
+  return TransitionType::PREDICATE;
 }
 
 bool PredicateTransition::isEpsilon() const {
@@ -22,13 +24,21 @@ bool PredicateTransition::matches(size_t /*symbol*/, size_t /*minVocabSymbol*/, 
   return false;
 }
 
-Ref<SemanticContext::Predicate> PredicateTransition::getPredicate() const {
-  return std::make_shared<SemanticContext::Predicate>(ruleIndex, predIndex, isCtxDependent);
+SemanticContext::Predicate PredicateTransition::getPredicate() const {
+  return SemanticContext::Predicate(getRuleIndex(), getPredIndex(), isCtxDependent());
+}
+
+bool PredicateTransition::equals(const Transition &other) const {
+  if (getType() != other.getType()) {
+    return false;
+  }
+  const PredicateTransition &that = downCast<const PredicateTransition&>(other);
+  return getRuleIndex() == that.getRuleIndex() && getPredIndex() == that.getPredIndex() && isCtxDependent() == that.isCtxDependent() && Transition::equals(other);
 }
 
 std::string PredicateTransition::toString() const {
-  return "PREDICATE " + Transition::toString() + " { ruleIndex: " + std::to_string(ruleIndex) +
-    ", predIndex: " + std::to_string(predIndex) + ", isCtxDependent: " + std::to_string(isCtxDependent) + " }";
+  return "PREDICATE " + Transition::toString() + " { ruleIndex: " + std::to_string(getRuleIndex()) +
+    ", predIndex: " + std::to_string(getPredIndex()) + ", isCtxDependent: " + std::to_string(isCtxDependent()) + " }";
 
   // Generate and add a predicate context here?
 }

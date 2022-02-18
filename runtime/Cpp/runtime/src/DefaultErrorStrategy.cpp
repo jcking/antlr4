@@ -216,7 +216,7 @@ bool DefaultErrorStrategy::singleTokenInsertion(Parser *recognizer) {
   // ATN state, then we know we're missing a token; error recovery
   // is free to conjure up and insert the missing token
   atn::ATNState *currentState = recognizer->getInterpreter<atn::ATNSimulator>()->atn.states[recognizer->getState()];
-  atn::ATNState *next = currentState->transitions[0]->target;
+  atn::ATNState *next = currentState->transitions[0].getTarget();
   const atn::ATN &atn = recognizer->getInterpreter<atn::ATNSimulator>()->atn;
   misc::IntervalSet expectingAtLL2 = atn.nextTokens(next, recognizer->getContext());
   if (expectingAtLL2.contains(currentSymbolType)) {
@@ -308,8 +308,7 @@ misc::IntervalSet DefaultErrorStrategy::getErrorRecoverySet(Parser *recognizer) 
   while (ctx->invokingState != ATNState::INVALID_STATE_NUMBER) {
     // compute what follows who invoked us
     atn::ATNState *invokingState = atn.states[ctx->invokingState];
-    const atn::RuleTransition *rt = dynamic_cast<const atn::RuleTransition*>(invokingState->transitions[0].get());
-    misc::IntervalSet follow = atn.nextTokens(rt->followState);
+    misc::IntervalSet follow = atn.nextTokens(invokingState->transitions[0].as<atn::RuleTransition>().getFollowState());
     recoverSet.addAll(follow);
 
     if (ctx->parent == nullptr)

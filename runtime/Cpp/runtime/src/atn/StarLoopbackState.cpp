@@ -11,7 +11,7 @@
 using namespace antlr4::atn;
 
 StarLoopEntryState *StarLoopbackState::getLoopEntryState() const {
-  return dynamic_cast<StarLoopEntryState *>(transitions[0]->target);
+  return dynamic_cast<StarLoopEntryState *>(transitions[0].getTarget());
 }
 
 ATNStateType StarLoopbackState::getStateType() const {

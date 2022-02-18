@@ -22,12 +22,20 @@ namespace atn {
   /// </summary>
   class ANTLR4CPP_PUBLIC LexerSkipAction final : public LexerAction {
   public:
-    /// Provides a singleton instance of this parameterless lexer action.
-    static const Ref<LexerSkipAction>& getInstance();
+    /// Constructs an instance of the lexer {@code skip} command.
+    LexerSkipAction() = default;
+
+    LexerSkipAction(const LexerSkipAction&) = default;
+
+    LexerSkipAction(LexerSkipAction&&) = default;
+
+    LexerSkipAction& operator=(const LexerSkipAction&) = default;
+
+    LexerSkipAction& operator=(LexerSkipAction&&) = default;
 
     /// <summary>
     /// {@inheritDoc} </summary>
-    /// <returns> This method returns <seealso cref="LexerActionType#SKIP"/>. </returns>
+    /// <returns> This method returns <seealso cref="LexerActionType#MODE"/>. </returns>
     virtual LexerActionType getActionType() const override;
 
     /// <summary>
@@ -40,15 +48,11 @@ namespace atn {
     ///
     /// <para>This action is implemented by calling <seealso cref="Lexer#skip"/>.</para>
     /// </summary>
-    virtual void execute(Lexer *lexer) override;
+    virtual void execute(Lexer *lexer) const override;
 
     virtual size_t hashCode() const override;
-    virtual bool operator==(const LexerAction &obj) const override;
+    virtual bool equals(const LexerAction &obj) const override;
     virtual std::string toString() const override;
-
-  private:
-    /// Constructs the singleton instance of the lexer {@code skip} command.
-    LexerSkipAction() = default;
   };
 
 } // namespace atn

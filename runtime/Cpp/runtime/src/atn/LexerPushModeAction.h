@@ -25,6 +25,14 @@ namespace atn {
     /// <param name="mode"> The mode value to pass to <seealso cref="Lexer#pushMode"/>. </param>
     explicit LexerPushModeAction(int mode);
 
+    LexerPushModeAction(const LexerPushModeAction&) = default;
+
+    LexerPushModeAction(LexerPushModeAction&&) = default;
+
+    LexerPushModeAction& operator=(const LexerPushModeAction&) = default;
+
+    LexerPushModeAction& operator=(LexerPushModeAction&&) = default;
+
     /// <summary>
     /// Get the lexer mode this action should transition the lexer to.
     /// </summary>
@@ -33,7 +41,7 @@ namespace atn {
 
     /// <summary>
     /// {@inheritDoc} </summary>
-    /// <returns> This method returns <seealso cref="LexerActionType#PUSH_MODE"/>. </returns>
+    /// <returns> This method returns <seealso cref="LexerActionType#MODE"/>. </returns>
     virtual LexerActionType getActionType() const override;
 
     /// <summary>
@@ -47,14 +55,14 @@ namespace atn {
     /// <para>This action is implemented by calling <seealso cref="Lexer#pushMode"/> with the
     /// value provided by <seealso cref="#getMode"/>.</para>
     /// </summary>
-    virtual void execute(Lexer *lexer) override;
+    virtual void execute(Lexer *lexer) const override;
 
     virtual size_t hashCode() const override;
-    virtual bool operator==(const LexerAction &obj) const override;
+    virtual bool equals(const LexerAction &obj) const override;
     virtual std::string toString() const override;
 
   private:
-    const int _mode;
+    int _mode;
   };
 
 } // namespace atn

@@ -14,16 +14,25 @@ namespace atn {
   /// A transition containing a set of values. </summary>
   class ANTLR4CPP_PUBLIC SetTransition : public Transition {
   public:
-    const misc::IntervalSet set;
-
     SetTransition(ATNState *target, misc::IntervalSet set);
 
-    virtual SerializationType getSerializationType() const override;
+    SetTransition(const SetTransition&) = default;
 
-    virtual misc::IntervalSet label() const override;
+    SetTransition(SetTransition&&) = default;
+
+    SetTransition& operator=(const SetTransition&) = default;
+
+    SetTransition& operator=(SetTransition&&) = default;
+
+    virtual TransitionType getType() const override;
+
+    virtual const misc::IntervalSet& label() const final;
     virtual bool matches(size_t symbol, size_t minVocabSymbol, size_t maxVocabSymbol) const override;
 
     virtual std::string toString() const override;
+
+  private:
+    misc::IntervalSet _set;
   };
 
 } // namespace atn

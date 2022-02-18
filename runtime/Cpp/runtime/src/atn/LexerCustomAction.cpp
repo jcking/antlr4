@@ -13,8 +13,8 @@ using namespace antlr4;
 using namespace antlr4::atn;
 using namespace antlr4::misc;
 
-LexerCustomAction::LexerCustomAction(size_t ruleIndex, size_t actionIndex) : _ruleIndex(ruleIndex), _actionIndex(actionIndex) {
-}
+LexerCustomAction::LexerCustomAction(size_t ruleIndex, size_t actionIndex)
+    : _ruleIndex(ruleIndex), _actionIndex(actionIndex) {}
 
 size_t LexerCustomAction::getRuleIndex() const {
   return _ruleIndex;
@@ -32,7 +32,7 @@ bool LexerCustomAction::isPositionDependent() const {
   return true;
 }
 
-void LexerCustomAction::execute(Lexer *lexer) {
+void LexerCustomAction::execute(Lexer *lexer) const {
   lexer->action(nullptr, _ruleIndex, _actionIndex);
 }
 
@@ -44,7 +44,7 @@ size_t LexerCustomAction::hashCode() const {
   return MurmurHash::finish(hash, 3);
 }
 
-bool LexerCustomAction::operator == (const LexerAction &obj) const {
+bool LexerCustomAction::equals(const LexerAction &obj) const {
   if (&obj == this) {
     return true;
   }

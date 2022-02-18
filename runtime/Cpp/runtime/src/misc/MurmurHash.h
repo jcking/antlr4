@@ -6,6 +6,7 @@
 #pragma once
 
 #include <cstdint>
+#include <type_traits>
 
 #include "antlr4-common.h"
 
@@ -43,8 +44,26 @@ namespace misc {
     }
 
     template <class T>
-    static size_t update(size_t hash, T *value) {
+    static size_t update(size_t hash, const T *value) {
       return update(hash, value != nullptr ? value->hashCode() : 0);
+    }
+
+    template <class T>
+    static std::enable_if_t<std::is_enum_v<T>, size_t> update(size_t hash, const T &value) {
+      return update(hash, static_cast<std::underlying_type_t<T>>(value));
+    }
+
+    template <class T>
+    static std::enable_if_t<std::is_class_v<T>, size_t> update(size_t hash, const T &value) {
+      return update(hash, value.hashCode());
+    }
+
+    template <class T>
+    static std::enable_if_t<std::is_class_v<T>, size_t> update(size_t hash, const std::vector<T> &values) {
+      for (const auto &value : values) {
+        hash = update(hash, value.hashCode());
+      }
+      return hash;
     }
 
     /// <summary>

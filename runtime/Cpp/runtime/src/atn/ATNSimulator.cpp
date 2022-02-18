@@ -53,7 +53,7 @@ void ATNSimulator::checkCondition(bool condition, const std::string &message) {
   ATNDeserializer::checkCondition(condition, message);
 }
 
-ConstTransitionPtr ATNSimulator::edgeFactory(const ATN &atn, int type, int src, int trg, int arg1, int arg2, int arg3,
+AnyTransition ATNSimulator::edgeFactory(const ATN &atn, int type, int src, int trg, int arg1, int arg2, int arg3,
                                       const std::vector<misc::IntervalSet> &sets) {
   return ATNDeserializer::edgeFactory(atn, type, src, trg, arg1, arg2, arg3, sets);
 }

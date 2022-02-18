@@ -6,6 +6,7 @@
 #pragma once
 
 #include "atn/DecisionEventInfo.h"
+#include "atn/AnySemanticContext.h"
 
 namespace antlr4 {
 namespace atn {
@@ -20,7 +21,7 @@ namespace atn {
   class ANTLR4CPP_PUBLIC PredicateEvalInfo : public DecisionEventInfo {
   public:
     /// The semantic context which was evaluated.
-    const Ref<const SemanticContext> semctx;
+    const AnySemanticContext semctx;
 
     /// <summary>
     /// The alternative number for the decision which is guarded by the semantic
@@ -55,7 +56,7 @@ namespace atn {
     /// <seealso cref= ParserATNSimulator#evalSemanticContext(SemanticContext, ParserRuleContext, int, boolean) </seealso>
     /// <seealso cref= SemanticContext#eval(Recognizer, RuleContext) </seealso>
     PredicateEvalInfo(size_t decision, TokenStream *input, size_t startIndex, size_t stopIndex,
-                      Ref<const SemanticContext> semctx, bool evalResult, size_t predictedAlt, bool fullCtx);
+                      AnySemanticContext semctx, bool evalResult, size_t predictedAlt, bool fullCtx);
   };
 
 } // namespace atn

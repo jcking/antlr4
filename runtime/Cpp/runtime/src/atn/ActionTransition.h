@@ -12,21 +12,38 @@ namespace atn {
 
   class ANTLR4CPP_PUBLIC ActionTransition final : public Transition {
   public:
-    const size_t ruleIndex;
-    const size_t actionIndex;
-    const bool isCtxDependent; // e.g., $i ref in action
-
     ActionTransition(ATNState *target, size_t ruleIndex);
 
     ActionTransition(ATNState *target, size_t ruleIndex, size_t actionIndex, bool isCtxDependent);
 
-    virtual SerializationType getSerializationType() const override;
+    ActionTransition(const ActionTransition&) = default;
+
+    ActionTransition(ActionTransition&&) = default;
+
+    ActionTransition& operator=(const ActionTransition&) = default;
+
+    ActionTransition& operator=(ActionTransition&&) = default;
+
+    constexpr size_t getRuleIndex() const { return _ruleIndex; }
+
+    constexpr size_t getActionIndex() const { return _actionIndex; }
+
+    constexpr bool isCtxDependent() const { return _isCtxDependent; }
+
+    virtual TransitionType getType() const override;
 
     virtual bool isEpsilon() const override;
 
     virtual bool matches(size_t symbol, size_t minVocabSymbol, size_t maxVocabSymbol) const override;
 
+    bool equals(const Transition &other) const override;
+
     virtual std::string toString() const override;
+
+  private:
+    size_t _ruleIndex;
+    size_t _actionIndex;
+    bool _isCtxDependent; // e.g., $i ref in action
   };
 
 } // namespace atn

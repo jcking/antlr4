@@ -10,21 +10,28 @@
 namespace antlr4 {
 namespace atn {
 
-  /// TODO: make all transitions sets? no, should remove set edges.
   class ANTLR4CPP_PUBLIC AtomTransition final : public Transition {
   public:
-    /// The token type or character value; or, signifies special label.
-    /// TODO: rename this to label
-    const size_t _label;
-
     AtomTransition(ATNState *target, size_t label);
 
-    virtual SerializationType getSerializationType() const override;
+    AtomTransition(const AtomTransition&) = default;
 
-    virtual misc::IntervalSet label() const override;
+    AtomTransition(AtomTransition&&) = default;
+
+    AtomTransition& operator=(const AtomTransition&) = default;
+
+    AtomTransition& operator=(AtomTransition&&) = default;
+
+    virtual TransitionType getType() const override;
+
+    virtual const misc::IntervalSet& label() const override;
     virtual bool matches(size_t symbol, size_t minVocabSymbol, size_t maxVocabSymbol) const override;
 
     virtual std::string toString() const override;
+
+  private:
+    // The token type or character value; or, signifies special label.
+    misc::IntervalSet _label;
   };
 
 } // namespace atn

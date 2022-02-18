@@ -6,6 +6,7 @@
 #pragma once
 
 #include "RuleContext.h"
+#include "atn/AnyLexerAction.h"
 
 // GCC generates a warning when forward-declaring ATN if ATN has already been
 // declared due to the attributes added by ANTLR4CPP_PUBLIC.
@@ -56,12 +57,11 @@ namespace atn {
 
     /// For lexer ATNs, this is an array of {@link LexerAction} objects which may
     /// be referenced by action transitions in the ATN.
-    std::vector<Ref<LexerAction>> lexerActions;
+    std::vector<AnyLexerAction> lexerActions;
 
     std::vector<TokensStartState *> modeToStartState;
 
-    ATN& operator = (ATN &other) noexcept;
-    ATN& operator = (ATN &&other) noexcept;
+    ATN& operator=(ATN &&other) noexcept;
 
     /// <summary>
     /// Compute the set of valid tokens that can occur starting in state {@code s}.

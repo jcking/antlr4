@@ -13,6 +13,7 @@
 #include "atn/LoopEndState.h"
 #include "atn/BlockStartState.h"
 #include "atn/Transition.h"
+#include "atn/AnyTransition.h"
 #include "atn/SetTransition.h"
 #include "Token.h"
 #include "misc/Interval.h"
@@ -29,6 +30,7 @@
 #include "atn/TokensStartState.h"
 #include "Exceptions.h"
 #include "support/CPPUtils.h"
+#include "support/Casts.h"
 
 #include "atn/LexerChannelAction.h"
 #include "atn/LexerCustomAction.h"
@@ -106,13 +108,12 @@ std::vector<size_t> ATNSerializer::serialize() {
     }
 
     for (size_t i = 0; i < s->transitions.size(); i++) {
-      const Transition *t = s->transitions[i].get();
-      Transition::SerializationType edgeType = t->getSerializationType();
-      if (edgeType == Transition::SET || edgeType == Transition::NOT_SET) {
-        const SetTransition *st = static_cast<const SetTransition *>(t);
-        if (setIndices.find(st->set) == setIndices.end()) {
-          sets.push_back(st->set);
-          setIndices.insert({ st->set, (int)sets.size() - 1 });
+      const AnyTransition &t = s->transitions[i];
+      TransitionType edgeType = t.getType();
+      if (edgeType == TransitionType::SET || edgeType == TransitionType::NOT_SET) {
+        if (setIndices.find(t.label()) == setIndices.end()) {
+          sets.push_back(t.label());
+          setIndices.insert({ t.label(), (int)sets.size() - 1 });
         }
       }
     }
@@ -193,75 +194,71 @@ std::vector<size_t> ATNSerializer::serialize() {
     }
 
     for (size_t i = 0; i < s->transitions.size(); i++) {
-      const Transition *t = s->transitions[i].get();
+      const AnyTransition &t = s->transitions[i];
 
-      if (atn->states[t->target->stateNumber] == nullptr) {
+      if (atn->states[t.getTarget()->stateNumber] == nullptr) {
         throw IllegalStateException("Cannot serialize a transition to a removed state.");
       }
 
       size_t src = s->stateNumber;
-      size_t trg = t->target->stateNumber;
-      Transition::SerializationType edgeType = t->getSerializationType();
+      size_t trg = t.getTarget()->stateNumber;
+      TransitionType edgeType = t.getType();
       size_t arg1 = 0;
       size_t arg2 = 0;
       size_t arg3 = 0;
       switch (edgeType) {
-        case Transition::RULE:
-          trg = (static_cast<const RuleTransition *>(t))->followState->stateNumber;
-          arg1 = (static_cast<const RuleTransition *>(t))->target->stateNumber;
-          arg2 = (static_cast<const RuleTransition *>(t))->ruleIndex;
-          arg3 = (static_cast<const RuleTransition *>(t))->precedence;
+        case TransitionType::RULE:
+          trg = t.as<RuleTransition>().getFollowState()->stateNumber;
+          arg1 = t.getTarget()->stateNumber;
+          arg2 = t.as<RuleTransition>().getRuleIndex();
+          arg3 = t.as<RuleTransition>().getPrecedence();
           break;
-        case Transition::PRECEDENCE:
+        case TransitionType::PRECEDENCE:
         {
-          const PrecedencePredicateTransition *ppt =
-          static_cast<const PrecedencePredicateTransition *>(t);
-          arg1 = ppt->precedence;
+          arg1 = t.as<PrecedencePredicateTransition>().getPrecedence();
         }
           break;
-        case Transition::PREDICATE:
+        case TransitionType::PREDICATE:
         {
-          const PredicateTransition *pt = static_cast<const PredicateTransition *>(t);
-          arg1 = pt->ruleIndex;
-          arg2 = pt->predIndex;
-          arg3 = pt->isCtxDependent ? 1 : 0;
+          arg1 = t.as<PredicateTransition>().getRuleIndex();
+          arg2 = t.as<PredicateTransition>().getPredIndex();
+          arg3 = t.as<PredicateTransition>().isCtxDependent() ? 1 : 0;
         }
           break;
-        case Transition::RANGE:
-          arg1 = (static_cast<const RangeTransition *>(t))->from;
-          arg2 = (static_cast<const RangeTransition *>(t))->to;
+        case TransitionType::RANGE:
+          arg1 = t.as<RangeTransition>().label().getMinElement();
+          arg2 = t.as<RangeTransition>().label().getMaxElement();
           if (arg1 == Token::EOF) {
             arg1 = 0;
             arg3 = 1;
           }
 
           break;
-        case Transition::ATOM:
-          arg1 = (static_cast<const AtomTransition *>(t))->_label;
+        case TransitionType::ATOM:
+          arg1 = t.as<AtomTransition>().label().getSingleElement();
           if (arg1 == Token::EOF) {
             arg1 = 0;
             arg3 = 1;
           }
 
           break;
-        case Transition::ACTION:
+        case TransitionType::ACTION:
         {
-          const ActionTransition *at = static_cast<const ActionTransition *>(t);
-          arg1 = at->ruleIndex;
-          arg2 = at->actionIndex;
+          arg1 = t.as<ActionTransition>().getRuleIndex();
+          arg2 = t.as<ActionTransition>().getActionIndex();
           if (arg2 == INVALID_INDEX) {
             arg2 = 0xFFFF;
           }
 
-          arg3 = at->isCtxDependent ? 1 : 0;
+          arg3 = t.as<ActionTransition>().isCtxDependent() ? 1 : 0;
         }
           break;
-        case Transition::SET:
-          arg1 = setIndices[(static_cast<const SetTransition *>(t))->set];
+        case TransitionType::SET:
+          arg1 = setIndices[t.label()];
           break;
 
-        case Transition::NOT_SET:
-          arg1 = setIndices[(static_cast<const SetTransition *>(t))->set];
+        case TransitionType::NOT_SET:
+          arg1 = setIndices[t.label()];
           break;
 
         default:
@@ -270,7 +267,7 @@ std::vector<size_t> ATNSerializer::serialize() {
 
       data.push_back(src);
       data.push_back(trg);
-      data.push_back(edgeType);
+      data.push_back(static_cast<size_t>(edgeType));
       data.push_back(arg1);
       data.push_back(arg2);
       data.push_back(arg3);
@@ -287,11 +284,11 @@ std::vector<size_t> ATNSerializer::serialize() {
   if (atn->grammarType == ATNType::LEXER) {
     data.push_back(atn->lexerActions.size());
     for (const auto &action : atn->lexerActions) {
-      data.push_back(static_cast<size_t>(action->getActionType()));
-      switch (action->getActionType()) {
+      data.push_back(static_cast<size_t>(action.getActionType()));
+      switch (action.getActionType()) {
         case LexerActionType::CHANNEL:
         {
-          int channel = std::dynamic_pointer_cast<LexerChannelAction>(action)->getChannel();
+          int channel = action.as<LexerChannelAction>().getChannel();
           data.push_back(channel != -1 ? channel : 0xFFFF);
           data.push_back(0);
           break;
@@ -299,8 +296,8 @@ std::vector<size_t> ATNSerializer::serialize() {
 
         case LexerActionType::CUSTOM:
         {
-          size_t ruleIndex = std::dynamic_pointer_cast<LexerCustomAction>(action)->getRuleIndex();
-          size_t actionIndex = std::dynamic_pointer_cast<LexerCustomAction>(action)->getActionIndex();
+          size_t ruleIndex = action.as<LexerCustomAction>().getRuleIndex();
+          size_t actionIndex = action.as<LexerCustomAction>().getActionIndex();
           data.push_back(ruleIndex != INVALID_INDEX ? ruleIndex : 0xFFFF);
           data.push_back(actionIndex != INVALID_INDEX ? actionIndex : 0xFFFF);
           break;
@@ -308,7 +305,7 @@ std::vector<size_t> ATNSerializer::serialize() {
 
         case LexerActionType::MODE:
         {
-          int mode = std::dynamic_pointer_cast<LexerModeAction>(action)->getMode();
+          int mode = action.as<LexerModeAction>().getMode();
           data.push_back(mode != -1 ? mode : 0xFFFF);
           data.push_back(0);
           break;
@@ -326,7 +323,7 @@ std::vector<size_t> ATNSerializer::serialize() {
 
         case LexerActionType::PUSH_MODE:
         {
-          int mode = std::dynamic_pointer_cast<LexerPushModeAction>(action)->getMode();
+          int mode = action.as<LexerPushModeAction>().getMode();
           data.push_back(mode != -1 ? mode : 0xFFFF);
           data.push_back(0);
           break;
@@ -339,7 +336,7 @@ std::vector<size_t> ATNSerializer::serialize() {
 
         case LexerActionType::TYPE:
         {
-          int type = std::dynamic_pointer_cast<LexerTypeAction>(action)->getType();
+          int type = action.as<LexerTypeAction>().getType();
           data.push_back(type != -1 ? type : 0xFFFF);
           data.push_back(0);
           break;
@@ -347,7 +344,7 @@ std::vector<size_t> ATNSerializer::serialize() {
 
         default:
           throw IllegalArgumentException("The specified lexer action type " +
-                                         std::to_string(static_cast<size_t>(action->getActionType())) +
+                                         std::to_string(static_cast<size_t>(action.getActionType())) +
                                          " is not valid.");
       }
     }
@@ -495,7 +492,7 @@ std::string ATNSerializer::decode(const std::wstring &inpdata) {
     .append("->")
     .append(std::to_string(trg))
     .append(" ")
-    .append(Transition::serializationNames[ttype])
+    .append(transitionName(static_cast<TransitionType>(ttype)))
     .append(" ")
     .append(std::to_string(arg1))
     .append(",")

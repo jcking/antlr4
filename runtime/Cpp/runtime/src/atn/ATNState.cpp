@@ -35,19 +35,19 @@ std::string ATNState::toString() const {
   return std::to_string(stateNumber);
 }
 
-void ATNState::addTransition(ConstTransitionPtr e) {
+void ATNState::addTransition(AnyTransition e) {
   addTransition(transitions.size(), std::move(e));
 }
 
-void ATNState::addTransition(size_t index, ConstTransitionPtr e) {
+void ATNState::addTransition(size_t index, AnyTransition e) {
   for (const auto &transition : transitions)
-    if (transition->target->stateNumber == e->target->stateNumber) {
+    if (transition.getTarget()->stateNumber == e.getTarget()->stateNumber) {
       return;
     }
 
   if (transitions.empty()) {
-    epsilonOnlyTransitions = e->isEpsilon();
-  } else if (epsilonOnlyTransitions != e->isEpsilon()) {
+    epsilonOnlyTransitions = e.isEpsilon();
+  } else if (epsilonOnlyTransitions != e.isEpsilon()) {
     std::cerr << "ATN state %d has both epsilon and non-epsilon transitions.\n" << stateNumber;
     epsilonOnlyTransitions = false;
   }
@@ -55,8 +55,8 @@ void ATNState::addTransition(size_t index, ConstTransitionPtr e) {
   transitions.insert(transitions.begin() + index, std::move(e));
 }
 
-ConstTransitionPtr ATNState::removeTransition(size_t index) {
-  ConstTransitionPtr result = std::move(transitions[index]);
+AnyTransition ATNState::removeTransition(size_t index) {
+  AnyTransition result = std::move(transitions[index]);
   transitions.erase(transitions.begin() + index);
   return result;
 }

@@ -5,7 +5,8 @@
 
 #pragma once
 
-#include "atn/LexerAction.h"
+#include "atn/AnyLexerAction.h"
+#include "atn/AnyTransition.h"
 #include "atn/ATNDeserializationOptions.h"
 #include "atn/Transition.h"
 
@@ -28,14 +29,14 @@ public:
   static void checkCondition(bool condition);
   static void checkCondition(bool condition, const std::string &message);
 
-  static ConstTransitionPtr edgeFactory(const ATN &atn, size_t type, size_t src, size_t trg, size_t arg1, size_t arg2,
+  static AnyTransition edgeFactory(const ATN &atn, size_t type, size_t src, size_t trg, size_t arg1, size_t arg2,
                                   size_t arg3, const std::vector<misc::IntervalSet> &sets);
 
   static ATNState *stateFactory(size_t type, size_t ruleIndex);
 
 protected:
   void markPrecedenceDecisions(const ATN &atn) const;
-  Ref<LexerAction> lexerActionFactory(LexerActionType type, int data1, int data2) const;
+  AnyLexerAction lexerActionFactory(LexerActionType type, int data1, int data2) const;
 
 private:
   const ATNDeserializationOptions _deserializationOptions;

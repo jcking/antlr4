@@ -13,16 +13,30 @@ namespace atn {
 
   class ANTLR4CPP_PUBLIC PrecedencePredicateTransition final : public AbstractPredicateTransition {
   public:
-    const int precedence;
-
     PrecedencePredicateTransition(ATNState *target, int precedence);
 
-    virtual SerializationType getSerializationType() const override;
+    PrecedencePredicateTransition(const PrecedencePredicateTransition&) = default;
+
+    PrecedencePredicateTransition(PrecedencePredicateTransition&&) = default;
+
+    PrecedencePredicateTransition& operator=(const PrecedencePredicateTransition&) = default;
+
+    PrecedencePredicateTransition& operator=(PrecedencePredicateTransition&&) = default;
+
+    constexpr int getPrecedence() const { return _precedence; }
+
+    SemanticContext::PrecedencePredicate getPredicate() const;
+
+    virtual TransitionType getType() const override;
     virtual bool isEpsilon() const override;
     virtual bool matches(size_t symbol, size_t minVocabSymbol, size_t maxVocabSymbol) const override;
-    Ref<SemanticContext::PrecedencePredicate> getPredicate() const;
+
+    bool equals(const Transition &other) const override;
+
     virtual std::string toString() const override;
 
+  private:
+    int _precedence;
   };
 
 } // namespace atn

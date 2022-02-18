@@ -12,8 +12,7 @@ using namespace antlr4;
 using namespace antlr4::atn;
 using namespace antlr4::misc;
 
-LexerTypeAction::LexerTypeAction(int type) : _type(type) {
-}
+LexerTypeAction::LexerTypeAction(int type) : _type(type) {}
 
 int LexerTypeAction::getType() const {
   return _type;
@@ -27,7 +26,7 @@ bool LexerTypeAction::isPositionDependent() const {
   return false;
 }
 
-void LexerTypeAction::execute(Lexer *lexer) {
+void LexerTypeAction::execute(Lexer *lexer) const {
   lexer->setType(_type);
 }
 
@@ -38,7 +37,7 @@ size_t LexerTypeAction::hashCode() const {
   return MurmurHash::finish(hash, 2);
 }
 
-bool LexerTypeAction::operator==(const LexerAction &obj) const {
+bool LexerTypeAction::equals(const LexerAction &obj) const {
   if (&obj == this) {
     return true;
   }

@@ -9,6 +9,7 @@
 #include "misc/IntervalSet.h"
 #include "support/CPPUtils.h"
 #include "atn/PredictionContext.h"
+#include "atn/AnyTransition.h"
 
 namespace antlr4 {
 namespace atn {
@@ -49,7 +50,7 @@ namespace atn {
     static void checkCondition(bool condition, const std::string &message);
 
     /// @deprecated Use <seealso cref="ATNDeserializer#edgeFactory"/> instead.
-    static ConstTransitionPtr edgeFactory(const ATN &atn, int type, int src, int trg, int arg1, int arg2, int arg3,
+    static AnyTransition edgeFactory(const ATN &atn, int type, int src, int trg, int arg1, int arg2, int arg3,
                                    const std::vector<misc::IntervalSet> &sets);
 
     /// @deprecated Use <seealso cref="ATNDeserializer#stateFactory"/> instead.

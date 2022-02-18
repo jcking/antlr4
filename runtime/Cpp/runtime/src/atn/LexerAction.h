@@ -21,7 +21,15 @@ namespace atn {
   /// </summary>
   class ANTLR4CPP_PUBLIC LexerAction {
   public:
+    LexerAction(const LexerAction&) = default;
+
+    LexerAction(LexerAction&&) = default;
+
     virtual ~LexerAction() = default;
+
+    LexerAction& operator=(const LexerAction&) = default;
+
+    LexerAction& operator=(LexerAction&&) = default;
 
     /// <summary>
     /// Gets the serialization type of the lexer action.
@@ -51,16 +59,21 @@ namespace atn {
     /// positioned correctly prior to calling this method.</para>
     /// </summary>
     /// <param name="lexer"> The lexer instance. </param>
-    virtual void execute(Lexer *lexer) = 0;
+    virtual void execute(Lexer *lexer) const = 0;
 
     virtual size_t hashCode() const = 0;
-    virtual bool operator == (const LexerAction &obj) const = 0;
-    virtual bool operator != (const LexerAction &obj) const {
-      return !(*this == obj);
-    }
+
+    virtual bool equals(const LexerAction &other) const = 0;
 
     virtual std::string toString() const = 0;
+
+  protected:
+    LexerAction() = default;
   };
+
+  inline bool operator==(const LexerAction &lhs, const LexerAction &rhs) { return lhs.equals(rhs); }
+
+  inline bool operator!=(const LexerAction &lhs, const LexerAction &rhs) { return !operator==(lhs, rhs); }
 
 } // namespace atn
 } // namespace antlr4
