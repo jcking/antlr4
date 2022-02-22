@@ -268,15 +268,12 @@ bool IntervalSet::contains(ssize_t el) const {
   if (_intervals.empty())
     return false;
 
-  if (el < _intervals[0].a) // list is sorted and el is before first interval; not here
+  if (el < _intervals.front().a || el > _intervals.back().b) // list is sorted and el is before first interval; not here
     return false;
 
-  for (const auto &interval : _intervals) {
-    if (el >= interval.a && el <= interval.b) {
-      return true; // found in this interval
-    }
-  }
-  return false;
+  return std::binary_search(_intervals.begin(), _intervals.end(), Interval(el, el), [](const Interval &lhs, const Interval &rhs) -> bool {
+    return lhs.b < rhs.a;
+  });
 }
 
 bool IntervalSet::isEmpty() const {
