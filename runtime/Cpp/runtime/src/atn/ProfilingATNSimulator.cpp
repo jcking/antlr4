@@ -20,8 +20,7 @@ using namespace std::chrono;
 
 ProfilingATNSimulator::ProfilingATNSimulator(Parser *parser)
   : ParserATNSimulator(parser, parser->getInterpreter<ParserATNSimulator>()->atn,
-                       parser->getInterpreter<ParserATNSimulator>()->decisionToDFA,
-                       parser->getInterpreter<ParserATNSimulator>()->getSharedContextCache()) {
+                       parser->getInterpreter<ParserATNSimulator>()->decisionToDFA) {
   for (size_t i = 0; i < atn.decisionToState.size(); i++) {
     _decisions.push_back(DecisionInfo(i));
   }
@@ -46,7 +45,7 @@ size_t ProfilingATNSimulator::adaptivePredict(TokenStream *input, size_t decisio
   _decisions[decision].SLL_MinLook = _decisions[decision].SLL_MinLook == 0 ? SLL_k : std::min(_decisions[decision].SLL_MinLook, SLL_k);
   if (SLL_k > _decisions[decision].SLL_MaxLook) {
     _decisions[decision].SLL_MaxLook = SLL_k;
-    _decisions[decision].SLL_MaxLookEvent = std::make_shared<LookaheadEventInfo>(decision, nullptr, alt, input, _startIndex, _sllStopIndex, false);
+    _decisions[decision].SLL_MaxLookEvent = std::make_shared<LookaheadEventInfo>(decision, ATNConfigSet(), alt, input, _startIndex, _sllStopIndex, false);
   }
 
   if (_llStopIndex >= 0) {
@@ -55,7 +54,7 @@ size_t ProfilingATNSimulator::adaptivePredict(TokenStream *input, size_t decisio
     _decisions[decision].LL_MinLook = _decisions[decision].LL_MinLook == 0 ? LL_k : std::min(_decisions[decision].LL_MinLook, LL_k);
     if (LL_k > _decisions[decision].LL_MaxLook) {
       _decisions[decision].LL_MaxLook = LL_k;
-      _decisions[decision].LL_MaxLookEvent = std::make_shared<LookaheadEventInfo>(decision, nullptr, alt, input, _startIndex, _llStopIndex, true);
+      _decisions[decision].LL_MaxLookEvent = std::make_shared<LookaheadEventInfo>(decision, ATNConfigSet(), alt, input, _startIndex, _llStopIndex, true);
     }
   }
 
@@ -72,7 +71,7 @@ DFAState* ProfilingATNSimulator::getExistingTargetState(DFAState *previousD, siz
     _decisions[_currentDecision].SLL_DFATransitions++; // count only if we transition over a DFA state
     if (existingTargetState == ERROR.get()) {
       _decisions[_currentDecision].errors.push_back(
-        ErrorInfo(_currentDecision, previousD->configs.get(), _input, _startIndex, _sllStopIndex, false)
+        ErrorInfo(_currentDecision, previousD->configs, _input, _startIndex, _sllStopIndex, false)
       );
     }
   }
@@ -87,24 +86,24 @@ DFAState* ProfilingATNSimulator::computeTargetState(DFA &dfa, DFAState *previous
   return state;
 }
 
-std::unique_ptr<ATNConfigSet> ProfilingATNSimulator::computeReachSet(ATNConfigSet *closure, size_t t, bool fullCtx) {
+ATNConfigSet ProfilingATNSimulator::computeReachSet(const atn::ATNConfigSet &closure, size_t t, bool fullCtx) {
   if (fullCtx) {
     // this method is called after each time the input position advances
     // during full context prediction
     _llStopIndex = (int)_input->index();
   }
 
-  std::unique_ptr<ATNConfigSet> reachConfigs = ParserATNSimulator::computeReachSet(closure, t, fullCtx);
+  ATNConfigSet reachConfigs = ParserATNSimulator::computeReachSet(closure, t, fullCtx);
   if (fullCtx) {
     _decisions[_currentDecision].LL_ATNTransitions++; // count computation even if error
-    if (reachConfigs != nullptr) {
+    if (!reachConfigs.isEmpty()) {
     } else { // no reach on current lookahead symbol. ERROR.
       // TODO: does not handle delayed errors per getSynValidOrSemInvalidAltThatFinishedDecisionEntryRule()
       _decisions[_currentDecision].errors.push_back(ErrorInfo(_currentDecision, closure, _input, _startIndex, _llStopIndex, true));
     }
   } else {
     ++_decisions[_currentDecision].SLL_ATNTransitions;
-    if (reachConfigs != nullptr) {
+    if (!reachConfigs.isEmpty()) {
     } else { // no reach on current lookahead symbol. ERROR.
       _decisions[_currentDecision].errors.push_back(ErrorInfo(_currentDecision, closure, _input, _startIndex, _sllStopIndex, false));
     }
@@ -125,18 +124,18 @@ bool ProfilingATNSimulator::evalSemanticContext(const AnySemanticContext &pred, 
   return result;
 }
 
-void ProfilingATNSimulator::reportAttemptingFullContext(DFA &dfa, const BitSet &conflictingAlts, ATNConfigSet *configs,
+void ProfilingATNSimulator::reportAttemptingFullContext(DFA &dfa, const BitSet &conflictingAlts, const atn::ATNConfigSet &configs,
                                                         size_t startIndex, size_t stopIndex) {
   if (conflictingAlts.count() > 0) {
-    conflictingAltResolvedBySLL = conflictingAlts.nextSetBit(0);
+    conflictingAltResolvedBySLL = conflictingAlts.find().value_or(INVALID_INDEX);
   } else {
-    conflictingAltResolvedBySLL = configs->getAlts().nextSetBit(0);
+    conflictingAltResolvedBySLL = configs.getAlts().find().value_or(INVALID_INDEX);
   }
   _decisions[_currentDecision].LL_Fallback++;
   ParserATNSimulator::reportAttemptingFullContext(dfa, conflictingAlts, configs, startIndex, stopIndex);
 }
 
-void ProfilingATNSimulator::reportContextSensitivity(DFA &dfa, size_t prediction, ATNConfigSet *configs,
+void ProfilingATNSimulator::reportContextSensitivity(DFA &dfa, size_t prediction, const atn::ATNConfigSet &configs,
                                                      size_t startIndex, size_t stopIndex) {
   if (prediction != conflictingAltResolvedBySLL) {
     _decisions[_currentDecision].contextSensitivities.push_back(
@@ -147,14 +146,14 @@ void ProfilingATNSimulator::reportContextSensitivity(DFA &dfa, size_t prediction
 }
 
 void ProfilingATNSimulator::reportAmbiguity(DFA &dfa, DFAState *D, size_t startIndex, size_t stopIndex, bool exact,
-                                            const BitSet &ambigAlts, ATNConfigSet *configs) {
+                                            const BitSet &ambigAlts, const atn::ATNConfigSet &configs) {
   size_t prediction;
   if (ambigAlts.count() > 0) {
-    prediction = ambigAlts.nextSetBit(0);
+    prediction = ambigAlts.find().value_or(INVALID_INDEX);
   } else {
-    prediction = configs->getAlts().nextSetBit(0);
+    prediction = configs.getAlts().find().value_or(INVALID_INDEX);
   }
-  if (configs->fullCtx && prediction != conflictingAltResolvedBySLL) {
+  if (configs.fullCtx && prediction != conflictingAltResolvedBySLL) {
     // Even though this is an ambiguity we are reporting, we can
     // still detect some context sensitivities.  Both SLL and LL
     // are showing a conflict, hence an ambiguity, but if they resolve
@@ -165,7 +164,7 @@ void ProfilingATNSimulator::reportAmbiguity(DFA &dfa, DFAState *D, size_t startI
     );
   }
   _decisions[_currentDecision].ambiguities.push_back(
-    AmbiguityInfo(_currentDecision, configs, ambigAlts, _input, startIndex, stopIndex, configs->fullCtx)
+    AmbiguityInfo(_currentDecision, configs, ambigAlts, _input, startIndex, stopIndex, configs.fullCtx)
   );
   ParserATNSimulator::reportAmbiguity(dfa, D, startIndex, stopIndex, exact, ambigAlts, configs);
 }

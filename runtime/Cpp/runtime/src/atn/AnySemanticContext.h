@@ -65,11 +65,11 @@ namespace atn {
 
     AnySemanticContext evalPrecedence(Recognizer *parser, RuleContext *parserCallStack) const { return get().evalPrecedence(parser, parserCallStack); }
 
-    size_t hashCode() const { return get().hashCode(); }
+    size_t hashCode() const { return valid() ? get().hashCode() : 0; }
 
-    bool equals(const SemanticContext &other) const { return get().equals(other); }
+    bool equals(const SemanticContext &other) const { return valid() && get().equals(other); }
 
-    bool equals(const AnySemanticContext &other) const { return equals(other.get()); }
+    bool equals(const AnySemanticContext &other) const { return valid() == other.valid() && (!valid() || get().equals(other.get())); }
 
     std::string toString() const { return get().toString(); }
 
@@ -84,8 +84,6 @@ namespace atn {
     }
 
     explicit operator bool() const { return valid(); }
-
-    bool operator!() const { return !valid(); }
 
   private:
     const SemanticContext& get() const;

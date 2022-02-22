@@ -21,7 +21,7 @@ DiagnosticErrorListener::DiagnosticErrorListener(bool exactOnly_) : exactOnly(ex
 }
 
 void DiagnosticErrorListener::reportAmbiguity(Parser *recognizer, const dfa::DFA &dfa, size_t startIndex, size_t stopIndex,
-   bool exact, const antlrcpp::BitSet &ambigAlts, atn::ATNConfigSet *configs) {
+   bool exact, const antlrcpp::BitSet &ambigAlts, const atn::ATNConfigSet &configs) {
   if (exactOnly && !exact) {
     return;
   }
@@ -36,7 +36,7 @@ void DiagnosticErrorListener::reportAmbiguity(Parser *recognizer, const dfa::DFA
 }
 
 void DiagnosticErrorListener::reportAttemptingFullContext(Parser *recognizer, const dfa::DFA &dfa, size_t startIndex,
-  size_t stopIndex, const antlrcpp::BitSet &/*conflictingAlts*/, atn::ATNConfigSet * /*configs*/) {
+  size_t stopIndex, const antlrcpp::BitSet &/*conflictingAlts*/, const atn::ATNConfigSet & /*configs*/) {
   std::string decision = getDecisionDescription(recognizer, dfa);
   std::string text = recognizer->getTokenStream()->getText(misc::Interval(startIndex, stopIndex));
   std::string message = "reportAttemptingFullContext d=" + decision + ", input='" + text + "'";
@@ -44,7 +44,7 @@ void DiagnosticErrorListener::reportAttemptingFullContext(Parser *recognizer, co
 }
 
 void DiagnosticErrorListener::reportContextSensitivity(Parser *recognizer, const dfa::DFA &dfa, size_t startIndex,
-  size_t stopIndex, size_t /*prediction*/, atn::ATNConfigSet * /*configs*/) {
+  size_t stopIndex, size_t /*prediction*/, const atn::ATNConfigSet & /*configs*/) {
   std::string decision = getDecisionDescription(recognizer, dfa);
   std::string text = recognizer->getTokenStream()->getText(misc::Interval(startIndex, stopIndex));
   std::string message = "reportContextSensitivity d=" + decision + ", input='" + text + "'";
@@ -69,15 +69,15 @@ std::string DiagnosticErrorListener::getDecisionDescription(Parser *recognizer, 
 }
 
 antlrcpp::BitSet DiagnosticErrorListener::getConflictingAlts(const antlrcpp::BitSet &reportedAlts,
-                                                             atn::ATNConfigSet *configs) {
+                                                             const atn::ATNConfigSet &configs) {
   if (reportedAlts.count() > 0) { // Not exactly like the original Java code, but this listener is only used
                                   // in the TestRig (where it never provides a good alt set), so it's probably ok so.
     return reportedAlts;
   }
 
   antlrcpp::BitSet result;
-  for (auto &config : configs->configs) {
-    result.set(config->alt);
+  for (const auto &config : configs) {
+    result.set(config.alt);
   }
 
   return result;

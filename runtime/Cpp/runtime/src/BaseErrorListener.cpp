@@ -13,13 +13,13 @@ void BaseErrorListener::syntaxError(Recognizer * /*recognizer*/, Token * /*offen
 }
 
 void BaseErrorListener::reportAmbiguity(Parser * /*recognizer*/, const dfa::DFA &/*dfa*/, size_t /*startIndex*/,
-  size_t /*stopIndex*/, bool /*exact*/, const antlrcpp::BitSet &/*ambigAlts*/, atn::ATNConfigSet * /*configs*/) {
+  size_t /*stopIndex*/, bool /*exact*/, const antlrcpp::BitSet &/*ambigAlts*/, const atn::ATNConfigSet & /*configs*/) {
 }
 
 void BaseErrorListener::reportAttemptingFullContext(Parser * /*recognizer*/, const dfa::DFA &/*dfa*/, size_t /*startIndex*/,
-  size_t /*stopIndex*/, const antlrcpp::BitSet &/*conflictingAlts*/, atn::ATNConfigSet * /*configs*/) {
+  size_t /*stopIndex*/, const antlrcpp::BitSet &/*conflictingAlts*/, const atn::ATNConfigSet & /*configs*/) {
 }
 
 void BaseErrorListener::reportContextSensitivity(Parser * /*recognizer*/, const dfa::DFA &/*dfa*/, size_t /*startIndex*/,
-  size_t /*stopIndex*/, size_t /*prediction*/, atn::ATNConfigSet * /*configs*/) {
+  size_t /*stopIndex*/, size_t /*prediction*/, const atn::ATNConfigSet & /*configs*/) {
 }

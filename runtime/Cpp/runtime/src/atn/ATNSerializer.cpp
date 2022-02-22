@@ -70,18 +70,18 @@ std::vector<size_t> ATNSerializer::serialize() {
   std::vector<size_t> nonGreedyStates;
   std::vector<size_t> precedenceStates;
   data.push_back(atn->states.size());
-  for (ATNState *s : atn->states) {
+  for (auto &s : atn->states) {
     if (s == nullptr) {  // might be optimized away
       data.push_back(ATNState::ATN_INVALID_TYPE);
       continue;
     }
 
     size_t stateType = s->getStateType();
-    if (is<DecisionState *>(s) && (static_cast<DecisionState *>(s))->nonGreedy) {
+    if (is<DecisionState *>(s.get()) && (static_cast<DecisionState *>(s.get()))->nonGreedy) {
       nonGreedyStates.push_back(s->stateNumber);
     }
 
-    if (is<RuleStartState *>(s) && (static_cast<RuleStartState *>(s))->isLeftRecursiveRule) {
+    if (is<RuleStartState *>(s.get()) && (static_cast<RuleStartState *>(s.get()))->isLeftRecursiveRule) {
       precedenceStates.push_back(s->stateNumber);
     }
 
@@ -95,10 +95,10 @@ std::vector<size_t> ATNSerializer::serialize() {
     }
 
     if (s->getStateType() == ATNState::LOOP_END) {
-      data.push_back((static_cast<LoopEndState *>(s))->loopBackState->stateNumber);
+      data.push_back((static_cast<LoopEndState *>(s.get()))->loopBackState->stateNumber);
     }
-    else if (is<BlockStartState *>(s)) {
-      data.push_back((static_cast<BlockStartState *>(s))->endState->stateNumber);
+    else if (is<BlockStartState *>(s.get())) {
+      data.push_back((static_cast<BlockStartState *>(s.get()))->endState->stateNumber);
     }
 
     if (s->getStateType() != ATNState::RULE_STOP) {
@@ -183,7 +183,7 @@ std::vector<size_t> ATNSerializer::serialize() {
   }
 
   data.push_back(nedges);
-  for (ATNState *s : atn->states) {
+  for (auto &s : atn->states) {
     if (s == nullptr) {
       // might be optimized away
       continue;

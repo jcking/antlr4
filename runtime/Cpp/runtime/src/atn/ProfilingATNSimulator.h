@@ -45,15 +45,15 @@ namespace atn {
 
     virtual dfa::DFAState* getExistingTargetState(dfa::DFAState *previousD, size_t t) override;
     virtual dfa::DFAState* computeTargetState(dfa::DFA &dfa, dfa::DFAState *previousD, size_t t) override;
-    virtual std::unique_ptr<ATNConfigSet> computeReachSet(ATNConfigSet *closure, size_t t, bool fullCtx) override;
+    virtual ATNConfigSet computeReachSet(const atn::ATNConfigSet &closure, size_t t, bool fullCtx) override;
     virtual bool evalSemanticContext(const AnySemanticContext &pred, ParserRuleContext *parserCallStack,
                                      size_t alt, bool fullCtx) override;
-    virtual void reportAttemptingFullContext(dfa::DFA &dfa, const antlrcpp::BitSet &conflictingAlts, ATNConfigSet *configs,
+    virtual void reportAttemptingFullContext(dfa::DFA &dfa, const antlrcpp::BitSet &conflictingAlts, const atn::ATNConfigSet &configs,
                                              size_t startIndex, size_t stopIndex) override;
-    virtual void reportContextSensitivity(dfa::DFA &dfa, size_t prediction, ATNConfigSet *configs,
+    virtual void reportContextSensitivity(dfa::DFA &dfa, size_t prediction, const atn::ATNConfigSet &configs,
                                           size_t startIndex, size_t stopIndex) override;
     virtual void reportAmbiguity(dfa::DFA &dfa, dfa::DFAState *D, size_t startIndex, size_t stopIndex, bool exact,
-                                 const antlrcpp::BitSet &ambigAlts, ATNConfigSet *configs) override;
+                                 const antlrcpp::BitSet &ambigAlts, const atn::ATNConfigSet &configs) override;
   };
 
 } // namespace atn

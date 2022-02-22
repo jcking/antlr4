@@ -86,8 +86,8 @@ namespace atn {
   public:
     static std::atomic<int> match_calls;
 
-    LexerATNSimulator(const ATN &atn, std::vector<dfa::DFA> &decisionToDFA, PredictionContextCache &sharedContextCache);
-    LexerATNSimulator(Lexer *recog, const ATN &atn, std::vector<dfa::DFA> &decisionToDFA, PredictionContextCache &sharedContextCache);
+    LexerATNSimulator(const ATN &atn, std::vector<dfa::DFA> &decisionToDFA);
+    LexerATNSimulator(Lexer *recog, const ATN &atn, std::vector<dfa::DFA> &decisionToDFA);
     virtual ~LexerATNSimulator() = default;
 
     virtual void copyState(LexerATNSimulator *simulator);
@@ -140,7 +140,7 @@ namespace atn {
 
     virtual ATNState *getReachableTarget(const Transition &trans, size_t t);
 
-    virtual std::unique_ptr<ATNConfigSet> computeStartState(CharStream *input, ATNState *p);
+    virtual ATNConfigSet computeStartState(CharStream *input, ATNState *p);
 
     /// <summary>
     /// Since the alternatives within any lexer decision are ordered by
@@ -151,11 +151,11 @@ namespace atn {
     /// </summary>
     /// <returns> {@code true} if an accept state is reached, otherwise
     /// {@code false}. </returns>
-    virtual bool closure(CharStream *input, const Ref<LexerATNConfig> &config, ATNConfigSet *configs,
+    virtual bool closure(CharStream *input, const ATNConfig &config, ATNConfigSet *configs,
                          bool currentAltReachedAcceptState, bool speculative, bool treatEofAsEpsilon);
 
     // side-effect: can alter configs.hasSemanticContext
-    virtual Ref<LexerATNConfig> getEpsilonTarget(CharStream *input, const Ref<LexerATNConfig> &config, const Transition &t,
+    virtual std::optional<ATNConfig> getEpsilonTarget(CharStream *input, const ATNConfig &config, const Transition &t,
       ATNConfigSet *configs, bool speculative, bool treatEofAsEpsilon);
 
     /// <summary>
@@ -181,7 +181,7 @@ namespace atn {
     virtual bool evaluatePredicate(CharStream *input, size_t ruleIndex, size_t predIndex, bool speculative);
 
     virtual void captureSimState(CharStream *input, dfa::DFAState *dfaState);
-    virtual dfa::DFAState* addDFAEdge(dfa::DFAState *from, size_t t, ATNConfigSet *q);
+    virtual dfa::DFAState* addDFAEdge(dfa::DFAState *from, size_t t, ATNConfigSet q);
     virtual void addDFAEdge(dfa::DFAState *p, size_t t, dfa::DFAState *q);
 
     /// <summary>
@@ -190,9 +190,9 @@ namespace atn {
     /// configuration containing an ATN rule stop state. Later, when
     /// traversing the DFA, we will know which rule to accept.
     /// </summary>
-    virtual dfa::DFAState *addDFAState(ATNConfigSet *configs);
+    virtual dfa::DFAState *addDFAState(ATNConfigSet configs);
 
-    virtual dfa::DFAState *addDFAState(ATNConfigSet *configs, bool suppressEdge);
+    virtual dfa::DFAState *addDFAState(ATNConfigSet configs, bool suppressEdge);
 
   public:
     dfa::DFA& getDFA(size_t mode);

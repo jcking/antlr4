@@ -8,6 +8,7 @@
 #include "atn/ATNSimulator.h"
 #include "Exceptions.h"
 #include "atn/SemanticContext.h"
+#include "atn/AnyPredictionContext.h"
 #include "support/Arrays.h"
 
 #include "atn/ATNConfigSet.h"
@@ -15,80 +16,61 @@
 using namespace antlr4::atn;
 using namespace antlrcpp;
 
-namespace {
-
-}
-
 ATNConfigSet::ATNConfigSet() : ATNConfigSet(true) {}
 
-ATNConfigSet::ATNConfigSet(const ATNConfigSet &other)
-    : fullCtx(other.fullCtx), _configLookup(other._configLookup.bucket_count(), ATNConfigHasher{this}, ATNConfigComparer{this}) {
-  addAll(other);
-  uniqueAlt = other.uniqueAlt;
-  conflictingAlts = other.conflictingAlts;
-  hasSemanticContext = other.hasSemanticContext;
-  dipsIntoOuterContext = other.dipsIntoOuterContext;
-}
+ATNConfigSet::ATNConfigSet(bool fullCtx) : ATNConfigSet(fullCtx, false) {}
 
-ATNConfigSet::ATNConfigSet(bool fullCtx)
-    : fullCtx(fullCtx), _configLookup(std::unordered_set<ATNConfig*, ATNConfigHasher, ATNConfigComparer>().bucket_count(), ATNConfigHasher{this}, ATNConfigComparer{this}) {}
-
-bool ATNConfigSet::add(const Ref<ATNConfig> &config) {
-  return add(config, nullptr);
-}
-
-bool ATNConfigSet::add(const Ref<ATNConfig> &config, PredictionContextMergeCache *mergeCache) {
-  assert(config);
-
+bool ATNConfigSet::add(const ATNConfig& config) {
   if (_readonly) {
     throw IllegalStateException("This set is readonly");
   }
-  if (config->semanticContext != SemanticContext::none()) {
+  if (config.semanticContext != SemanticContext::none()) {
     hasSemanticContext = true;
   }
-  if (config->getOuterContextDepth() > 0) {
+  if (config.getOuterContextDepth() > 0) {
     dipsIntoOuterContext = true;
   }
 
-  auto existing = _configLookup.find(config.get());
-  if (existing == _configLookup.end()) {
-    _configLookup.insert(config.get());
+  auto [existing, inserted] = _configLookup.insert(config);
+  if (inserted) {
     _cachedHashCode = 0;
-    configs.push_back(config); // track order here
-
     return true;
   }
 
   // a previous (s,i,pi,_), merge with it and save result
   bool rootIsWildcard = !fullCtx;
-  Ref<const PredictionContext> merged = PredictionContext::merge((*existing)->context, config->context, rootIsWildcard, mergeCache);
+  AnyPredictionContext merged = PredictionContext::merge(existing->context, config.context, rootIsWildcard);
   // no need to check for existing.context, config.context in cache
   // since only way to create new graphs is "call rule" and here. We
   // cache at both places.
-  (*existing)->reachesIntoOuterContext = std::max((*existing)->reachesIntoOuterContext, config->reachesIntoOuterContext);
+  const_cast<ATNConfig&>(*existing).reachesIntoOuterContext = std::max(existing->reachesIntoOuterContext, config.reachesIntoOuterContext);
 
   // make sure to preserve the precedence filter suppression during the merge
-  if (config->isPrecedenceFilterSuppressed()) {
-    (*existing)->setPrecedenceFilterSuppressed(true);
+  if (config.isPrecedenceFilterSuppressed()) {
+    const_cast<ATNConfig&>(*existing).setPrecedenceFilterSuppressed(true);
   }
 
-  (*existing)->context = std::move(merged); // replace context; no need to alt mapping
+  const_cast<ATNConfig&>(*existing).context = std::move(merged); // replace context; no need to alt mapping
 
   return true;
 }
 
 bool ATNConfigSet::addAll(const ATNConfigSet &other) {
-  for (const auto &c : other.configs) {
-    add(c);
+  for (const auto &config : other) {
+    add(config);
   }
   return false;
 }
 
+void ATNConfigSet::reserve(size_t size) {
+  _configLookup.reserve(size);
+}
+
 std::vector<ATNState*> ATNConfigSet::getStates() const {
   std::vector<ATNState*> states;
-  states.reserve(configs.size());
-  for (const auto &c : configs) {
-    states.push_back(c->state);
+  states.reserve(_configLookup.size());
+  for (const auto &config : *this) {
+    states.push_back(config.state);
   }
   return states;
 }
@@ -104,25 +86,21 @@ std::vector<ATNState*> ATNConfigSet::getStates() const {
 
 BitSet ATNConfigSet::getAlts() const {
   BitSet alts;
-  for (const auto &config : configs) {
-    alts.set(config->alt);
+  for (const auto &config : *this) {
+    alts.set(config.alt);
   }
   return alts;
 }
 
 std::vector<AnySemanticContext> ATNConfigSet::getPredicates() const {
   std::vector<AnySemanticContext> preds;
-  preds.reserve(configs.size());
-  for (const auto &c : configs) {
-    if (c->semanticContext != SemanticContext::none()) {
-      preds.push_back(c->semanticContext);
+  preds.reserve(_configLookup.size());
+  for (const auto &config : *this) {
+    if (config.semanticContext != SemanticContext::none()) {
+      preds.push_back(config.semanticContext);
     }
   }
   return preds;
-}
-
-const Ref<ATNConfig>& ATNConfigSet::get(size_t i) const {
-  return configs[i];
 }
 
 void ATNConfigSet::optimizeConfigs(ATNSimulator *interpreter) {
@@ -133,10 +111,6 @@ void ATNConfigSet::optimizeConfigs(ATNSimulator *interpreter) {
   }
   if (_configLookup.empty())
     return;
-
-  for (const auto &config : configs) {
-    config->context = interpreter->getCachedContext(config->context);
-  }
 }
 
 bool ATNConfigSet::equals(const ATNConfigSet &other) const {
@@ -144,7 +118,7 @@ bool ATNConfigSet::equals(const ATNConfigSet &other) const {
     return true;
   }
 
-  if (configs.size() != other.configs.size())
+  if (_configLookup.size() != other._configLookup.size())
     return false;
 
   if (fullCtx != other.fullCtx || uniqueAlt != other.uniqueAlt ||
@@ -152,34 +126,33 @@ bool ATNConfigSet::equals(const ATNConfigSet &other) const {
       dipsIntoOuterContext != other.dipsIntoOuterContext) // includes stack context
     return false;
 
-  return Arrays::equals(configs, other.configs);
+  return _configLookup == other._configLookup;
 }
 
 size_t ATNConfigSet::hashCode() const {
-  size_t cachedHashCode = _cachedHashCode.load(std::memory_order_relaxed);
+  size_t cachedHashCode = _cachedHashCode;
   if (!isReadonly() || cachedHashCode == 0) {
     cachedHashCode = 1;
-    for (const auto &i : configs) {
-      cachedHashCode = 31 * cachedHashCode + i->hashCode(); // Same as Java's list hashCode impl.
+    for (const auto &config : *this) {
+      cachedHashCode = 31 * cachedHashCode + config.hashCode(); // Same as Java's list hashCode impl.
     }
-    _cachedHashCode.store(cachedHashCode, std::memory_order_relaxed);
+    _cachedHashCode = cachedHashCode;
   }
   return cachedHashCode;
 }
 
 size_t ATNConfigSet::size() const {
-  return configs.size();
+  return _configLookup.size();
 }
 
 bool ATNConfigSet::isEmpty() const {
-  return configs.empty();
+  return _configLookup.empty();
 }
 
 void ATNConfigSet::clear() {
   if (_readonly) {
     throw IllegalStateException("This set is readonly");
   }
-  configs.clear();
   _cachedHashCode = 0;
   _configLookup.clear();
 }
@@ -190,14 +163,16 @@ bool ATNConfigSet::isReadonly() const {
 
 void ATNConfigSet::setReadonly(bool readonly) {
   _readonly = readonly;
-  _configLookup.clear();
 }
+
+ATNConfigSet::ATNConfigSet(bool fullCtx, bool ordered)
+    : fullCtx(fullCtx), _configLookup(Container().bucket_count(), ATNConfigHasher{ordered}, ATNConfigComparer{ordered}) {}
 
 std::string ATNConfigSet::toString() const {
   std::stringstream ss;
   ss << "[";
-  for (size_t i = 0; i < configs.size(); i++) {
-    ss << configs[i]->toString();
+  for (const auto &config : *this) {
+    ss << config.toString();
   }
   ss << "]";
 
@@ -208,7 +183,7 @@ std::string ATNConfigSet::toString() const {
     ss << ",uniqueAlt = " << uniqueAlt;
   }
 
-  if (conflictingAlts.size() > 0) {
+  if (conflictingAlts.count() > 0) {
     ss << ",conflictingAlts = ";
     ss << conflictingAlts.toString();
   }
@@ -219,7 +194,10 @@ std::string ATNConfigSet::toString() const {
   return ss.str();
 }
 
-size_t ATNConfigSet::hashCode(const ATNConfig &other) const {
+size_t ATNConfigSet::hashCode(bool ordered, const ATNConfig &other) {
+  if (ordered) {
+    return other.hashCode();
+  }
   size_t hashCode = 7;
   hashCode = 31 * hashCode + other.state->stateNumber;
   hashCode = 31 * hashCode + other.alt;
@@ -227,6 +205,9 @@ size_t ATNConfigSet::hashCode(const ATNConfig &other) const {
   return hashCode;
 }
 
-bool ATNConfigSet::equals(const ATNConfig &lhs, const ATNConfig &rhs) const {
+bool ATNConfigSet::equals(bool ordered, const ATNConfig &lhs, const ATNConfig &rhs) {
+  if (ordered) {
+    return lhs == rhs;
+  }
   return lhs.state->stateNumber == rhs.state->stateNumber && lhs.alt == rhs.alt && lhs.semanticContext == rhs.semanticContext;
 }

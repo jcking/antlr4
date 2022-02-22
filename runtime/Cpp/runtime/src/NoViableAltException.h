@@ -19,17 +19,17 @@ namespace antlr4 {
   public:
     NoViableAltException(Parser *recognizer); // LL(1) error
     NoViableAltException(Parser *recognizer, TokenStream *input,Token *startToken,
-      Token *offendingToken, atn::ATNConfigSet *deadEndConfigs, ParserRuleContext *ctx, bool deleteConfigs);
+      Token *offendingToken, atn::ATNConfigSet deadEndConfigs, ParserRuleContext *ctx);
     ~NoViableAltException();
-    
+
     virtual Token* getStartToken() const;
-    virtual atn::ATNConfigSet* getDeadEndConfigs() const;
+    virtual const atn::ATNConfigSet* getDeadEndConfigs() const;
 
   private:
     /// Which configurations did we try at input.index() that couldn't match input.LT(1)?
     /// Shared pointer that conditionally deletes the configurations (based on flag
     /// passed during construction)
-    Ref<atn::ATNConfigSet> _deadEndConfigs;
+    atn::ATNConfigSet _deadEndConfigs;
 
     /// The token object at the start index; the input stream might
     /// not be buffering tokens so get a reference to it. (At the

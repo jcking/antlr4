@@ -4,32 +4,16 @@
  */
 
 #include "atn/EmptyPredictionContext.h"
+#include "atn/AnyPredictionContext.h"
 
 using namespace antlr4::atn;
 
-EmptyPredictionContext::EmptyPredictionContext() : SingletonPredictionContext(nullptr, EMPTY_RETURN_STATE) {
+EmptyPredictionContext::EmptyPredictionContext() : SingletonPredictionContext(AnyPredictionContext(), EMPTY_RETURN_STATE) {}
+
+PredictionContextType EmptyPredictionContext::getType() const {
+  return PredictionContextType::EMPTY;
 }
 
 bool EmptyPredictionContext::isEmpty() const {
   return true;
-}
-
-size_t EmptyPredictionContext::size() const {
-  return 1;
-}
-
-Ref<const PredictionContext> EmptyPredictionContext::getParent(size_t /*index*/) const {
-  return nullptr;
-}
-
-size_t EmptyPredictionContext::getReturnState(size_t /*index*/) const {
-  return returnState;
-}
-
-bool EmptyPredictionContext::operator==(const PredictionContext &o) const {
-  return this == &o;
-}
-
-std::string EmptyPredictionContext::toString() const {
-  return "$";
 }

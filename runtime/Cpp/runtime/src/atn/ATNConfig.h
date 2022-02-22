@@ -6,10 +6,13 @@
 #pragma once
 
 #include <cassert>
+#include <functional>
 
 #include "antlr4-common.h"
 #include "atn/SemanticContext.h"
+#include "atn/AnyPredictionContext.h"
 #include "atn/AnySemanticContext.h"
+#include "atn/LexerActionExecutor.h"
 
 namespace antlr4 {
 namespace atn {
@@ -22,43 +25,20 @@ namespace atn {
   ///  the tree of semantic predicates encountered before reaching
   ///  an ATN state.
   /// </summary>
-  class ANTLR4CPP_PUBLIC ATNConfig {
+  class ANTLR4CPP_PUBLIC ATNConfig final {
   public:
-    struct Hasher
-    {
-      size_t operator()(Ref<ATNConfig> const& k) const {
-        return k->hashCode();
-      }
-
-      size_t operator()(ATNConfig const& k) const {
-        return k.hashCode();
-      }
-    };
-
-    struct Comparer {
-      bool operator()(Ref<ATNConfig> const& lhs, Ref<ATNConfig> const& rhs) const {
-        return (lhs == rhs) || (*lhs == *rhs);
-      }
-
-      bool operator()(ATNConfig const& lhs, ATNConfig const& rhs) const {
-        return (&lhs == &rhs) || (lhs == rhs);
-      }
-    };
-
-    using Set = std::unordered_set<Ref<ATNConfig>, Hasher, Comparer>;
-
     /// The ATN state associated with this configuration.
     ATNState *state = nullptr;
 
     /// What alt (or lexer rule) is predicted by this configuration.
-    const size_t alt = 0;
+    size_t alt = 0;
 
     /// The stack of invoking states leading to the rule/states associated
     /// with this config.  We track only those contexts pushed during
     /// execution of the ATN simulator.
     ///
     /// Can be shared between multiple ANTConfig instances.
-    Ref<const PredictionContext> context;
+    AnyPredictionContext context;
 
     /**
      * We cannot execute predicates dependent upon local context unless
@@ -88,22 +68,29 @@ namespace atn {
     /// Can be shared between multiple ATNConfig instances.
     AnySemanticContext semanticContext;
 
-    ATNConfig(ATNState *state, size_t alt, Ref<const PredictionContext> context);
-    ATNConfig(ATNState *state, size_t alt, Ref<const PredictionContext> context, AnySemanticContext semanticContext);
+    LexerActionExecutor lexerActionExecutor;
+
+    ATNConfig() = default;
+
+    ATNConfig(ATNState *state, size_t alt, AnyPredictionContext context);
+    ATNConfig(ATNState *state, size_t alt, AnyPredictionContext context, AnySemanticContext semanticContext);
+    ATNConfig(ATNState *state, size_t alt, AnyPredictionContext context, LexerActionExecutor lexerActionExecutor);
 
     ATNConfig(ATNConfig const& other, AnySemanticContext semanticContext);
     ATNConfig(ATNConfig const& other, ATNState *state);
     ATNConfig(ATNConfig const& other, ATNState *state, AnySemanticContext semanticContext);
-    ATNConfig(ATNConfig const& other, ATNState *state, Ref<const PredictionContext> context);
-    ATNConfig(ATNConfig const& other, ATNState *state, Ref<const PredictionContext> context, AnySemanticContext semanticContext);
+    ATNConfig(ATNConfig const& other, ATNState *state, LexerActionExecutor lexerActionExecutor);
+    ATNConfig(ATNConfig const& other, ATNState *state, AnyPredictionContext context);
+    ATNConfig(ATNConfig const& other, ATNState *state, AnyPredictionContext context, AnySemanticContext semanticContext);
+    ATNConfig(ATNConfig const& other, ATNState *state, AnyPredictionContext context, LexerActionExecutor lexerActionExecutor);
 
-    ATNConfig(ATNConfig const&) = default;
+    ATNConfig(const ATNConfig&) = default;
 
     ATNConfig(ATNConfig&&) = default;
 
-    virtual ~ATNConfig() = default;
+    ATNConfig& operator=(const ATNConfig&) = default;
 
-    virtual size_t hashCode() const;
+    ATNConfig& operator=(ATNConfig&&) = default;
 
     /**
      * This method gets the value of the {@link #reachesIntoOuterContext} field
@@ -113,46 +100,34 @@ namespace atn {
     size_t getOuterContextDepth() const;
     bool isPrecedenceFilterSuppressed() const;
     void setPrecedenceFilterSuppressed(bool value);
+    const LexerActionExecutor& getLexerActionExecutor() const { return lexerActionExecutor; }
+    bool hasPassedThroughNonGreedyDecision() const;
 
-    /// An ATN configuration is equal to another if both have
-    /// the same state, they predict the same alternative, and
-    /// syntactic/semantic contexts are the same.
-    bool operator==(const ATNConfig &other) const;
-    bool operator!=(const ATNConfig &other) const;
+    size_t hashCode() const;
 
-    virtual std::string toString() const;
+    bool equals(const ATNConfig &other) const;
+
+    std::string toString() const;
     std::string toString(bool showAlt) const;
 
   private:
-    ATNConfig(ATNState *state, size_t alt, Ref<const PredictionContext> context, size_t reachesIntoOuterContext, AnySemanticContext semanticContext);
+    ATNConfig(ATNState *state, size_t alt, AnyPredictionContext context, size_t reachesIntoOuterContext, AnySemanticContext semanticContext, LexerActionExecutor lexerActionExecutor);
   };
 
-} // namespace atn
-} // namespace antlr4
+  inline bool operator==(const ATNConfig &lhs, const ATNConfig &rhs) { return lhs.equals(rhs); }
 
+  inline bool operator!=(const ATNConfig &lhs, const ATNConfig &rhs) { return !operator==(lhs, rhs); }
 
-// Hash function for ATNConfig.
+}  // namespace atn
+}  // namespace antlr4
 
 namespace std {
-  using antlr4::atn::ATNConfig;
 
-  template <> struct hash<ATNConfig>
-  {
-    size_t operator() (const ATNConfig &x) const
-    {
-      return x.hashCode();
+  template <>
+  struct hash<::antlr4::atn::ATNConfig> {
+    size_t operator()(const ::antlr4::atn::ATNConfig &atnConfig) const {
+      return atnConfig.hashCode();
     }
   };
 
-  template <> struct hash<std::vector<Ref<ATNConfig>>>
-  {
-    size_t operator() (const std::vector<Ref<ATNConfig>> &vector) const
-    {
-      std::size_t seed = 0;
-      for (const auto &config : vector) {
-        seed ^= config->hashCode() + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-      }
-      return seed;
-    }
-  };
-}
+}  // namespace std

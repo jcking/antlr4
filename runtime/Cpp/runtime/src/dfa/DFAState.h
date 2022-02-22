@@ -7,6 +7,7 @@
 
 #include "antlr4-common.h"
 
+#include "atn/ATNConfigSet.h"
 #include "atn/LexerActionExecutor.h"
 #include "atn/AnySemanticContext.h"
 
@@ -58,22 +59,22 @@ namespace dfa {
       std::string toString() const;
     };
 
-    int stateNumber;
+    int stateNumber = -1;
 
-    std::unique_ptr<atn::ATNConfigSet> configs;
+    atn::ATNConfigSet configs;
 
     /// {@code edges[symbol]} points to target of symbol. Shift up by 1 so (-1)
     ///  <seealso cref="Token#EOF"/> maps to {@code edges[0]}.
     // ml: this is a sparse list, so we use a map instead of a vector.
     //     Watch out: we no longer have the -1 offset, as it isn't needed anymore.
-    std::unordered_map<size_t, DFAState *> edges;
+    std::unordered_map<size_t, DFAState*> edges;
 
-    bool isAcceptState;
+    bool isAcceptState = false;
 
     /// if accept state, what ttype do we match or alt do we predict?
     /// This is set to <seealso cref="ATN#INVALID_ALT_NUMBER"/> when <seealso cref="#predicates"/>{@code !=null} or
     /// <seealso cref="#requiresFullContext"/>.
-    size_t prediction;
+    size_t prediction = 0;
 
     atn::LexerActionExecutor lexerActionExecutor;
 
@@ -83,7 +84,7 @@ namespace dfa {
     /// <seealso cref="ParserATNSimulator#execATN"/> invocations immediately jumped doing
     /// full context prediction if this field is true.
     /// </summary>
-    bool requiresFullContext;
+    bool requiresFullContext = false;
 
     /// <summary>
     /// During SLL parsing, this is a list of predicates associated with the
@@ -101,11 +102,11 @@ namespace dfa {
     std::vector<PredPrediction> predicates;
 
     /// Map a predicate to a predicted alternative.
-    DFAState();
+    DFAState() = default;
 
     explicit DFAState(int state);
 
-    explicit DFAState(std::unique_ptr<atn::ATNConfigSet> configs);
+    explicit DFAState(atn::ATNConfigSet configs);
 
     /// <summary>
     /// Get the set of all alts mentioned by all ATN configurations in this
@@ -126,27 +127,25 @@ namespace dfa {
     /// ParserATNSimulator#addDFAState we need to know if any other state
     /// exists that has this exact set of ATN configurations. The
     /// stateNumber is irrelevant.
-    bool operator==(const DFAState &o) const;
+    bool equals(const DFAState &other) const;
 
     std::string toString() const;
-
-    struct Hasher
-    {
-      size_t operator()(const DFAState *k) const {
-        return k->hashCode();
-      }
-    };
-
-    struct Comparer {
-      bool operator()(const DFAState *lhs, const DFAState *rhs) const
-      {
-        return *lhs == *rhs;
-      }
-    };
-
-  private:
-    void InitializeInstanceFields();
   };
 
-} // namespace atn
+  inline bool operator==(const DFAState &lhs, const DFAState &rhs) { return lhs.equals(rhs); }
+
+  inline bool operator!=(const DFAState &lhs, const DFAState &rhs) { return !operator==(lhs, rhs); }
+
+} // namespace dfa
 } // namespace antlr4
+
+namespace std {
+
+  template <>
+  struct hash<::antlr4::dfa::DFAState> {
+    size_t operator()(const ::antlr4::dfa::DFAState &dfaState) const {
+      return dfaState.hashCode();
+    }
+  };
+
+}  // namespace std

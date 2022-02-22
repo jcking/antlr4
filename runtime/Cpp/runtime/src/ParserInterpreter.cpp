@@ -47,7 +47,7 @@ ParserInterpreter::ParserInterpreter(const std::string &grammarFileName, const d
   }
 
   // get atn simulator that knows how to do predictions
-  _interpreter = new atn::ParserATNSimulator(this, atn, _decisionToDFA, _sharedContextCache); /* mem-check: deleted in d-tor */
+  _interpreter = new atn::ParserATNSimulator(this, atn, _decisionToDFA); /* mem-check: deleted in d-tor */
 }
 
 ParserInterpreter::~ParserInterpreter() {
@@ -144,7 +144,7 @@ InterpreterRuleContext* ParserInterpreter::getRootContext() {
 }
 
 atn::ATNState* ParserInterpreter::getATNState() {
-  return _atn.states[getState()];
+  return _atn.states[getState()].get();
 }
 
 void ParserInterpreter::visitState(atn::ATNState *p) {

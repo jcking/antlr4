@@ -10,17 +10,23 @@
 namespace antlr4 {
 namespace atn {
 
-  class ANTLR4CPP_PUBLIC EmptyPredictionContext : public SingletonPredictionContext {
+  class AnyPredictionContext;
+
+  class ANTLR4CPP_PUBLIC EmptyPredictionContext final : public SingletonPredictionContext {
   public:
     EmptyPredictionContext();
 
-    virtual bool isEmpty() const override;
-    virtual size_t size() const override;
-    virtual Ref<const PredictionContext> getParent(size_t index) const override;
-    virtual size_t getReturnState(size_t index) const override;
-    virtual std::string toString() const override;
+    EmptyPredictionContext(const EmptyPredictionContext&) = default;
 
-    virtual bool operator==(const PredictionContext &o) const override;
+    EmptyPredictionContext(EmptyPredictionContext&&) = default;
+
+    EmptyPredictionContext& operator=(const EmptyPredictionContext&) = default;
+
+    EmptyPredictionContext& operator=(EmptyPredictionContext&&) = default;
+
+    PredictionContextType getType() const override;
+
+    bool isEmpty() const override;
   };
 
 } // namespace atn

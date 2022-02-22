@@ -10,26 +10,37 @@
 namespace antlr4 {
 namespace atn {
 
+  class AnyPredictionContext;
+
   class ANTLR4CPP_PUBLIC SingletonPredictionContext : public PredictionContext {
   public:
+    static AnyPredictionContext create(AnyPredictionContext parent, size_t returnState);
+
+    SingletonPredictionContext(AnyPredictionContext parent, size_t returnState);
+
+    SingletonPredictionContext(const SingletonPredictionContext&) = default;
+
+    SingletonPredictionContext(SingletonPredictionContext&&) = default;
+
+    SingletonPredictionContext& operator=(const SingletonPredictionContext&) = default;
+
+    SingletonPredictionContext& operator=(SingletonPredictionContext&&) = default;
+
+    PredictionContextType getType() const override;
+
+    virtual size_t size() const final;
+    virtual const AnyPredictionContext& getParent(size_t index) const final;
+    virtual size_t getReturnState(size_t index) const final;
+    bool isEmpty() const override;
+
+  private:
     // Usually a parent is linked via a weak ptr. Not so here as we have kinda reverse reference chain.
     // There are no child contexts stored here and often the parent context is left dangling when it's
     // owning ATNState is released. In order to avoid having this context released as well (leaving all other contexts
     // which got this one as parent with a null reference) we use a shared_ptr here instead, to keep those left alone
     // parent contexts alive.
-    const Ref<const PredictionContext> parent;
-    const size_t returnState;
-
-    SingletonPredictionContext(Ref<const PredictionContext> parent, size_t returnState);
-    virtual ~SingletonPredictionContext() = default;
-
-    static Ref<const SingletonPredictionContext> create(Ref<const PredictionContext> parent, size_t returnState);
-
-    virtual size_t size() const override;
-    virtual Ref<const PredictionContext> getParent(size_t index) const override;
-    virtual size_t getReturnState(size_t index) const override;
-    virtual bool operator == (const PredictionContext &o) const override;
-    virtual std::string toString() const override;
+    std::shared_ptr<const AnyPredictionContext> _parent;
+    size_t _returnState;
   };
 
 } // namespace atn

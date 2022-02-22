@@ -83,7 +83,7 @@ namespace antlr4 {
     class LL1Analyzer;
     class LexerAction;
     class LexerActionExecutor;
-    class LexerATNConfig;
+    using LexerATNConfig = ATNConfig;
     class LexerATNSimulator;
     class LexerMoreAction;
     class LexerPopModeAction;

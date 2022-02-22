@@ -36,8 +36,6 @@ namespace antlr4 {
     const std::vector<std::string> &_modeNames;
     std::vector<dfa::DFA> _decisionToDFA;
 
-    atn::PredictionContextCache _sharedContextCache;
-
   private:
     dfa::Vocabulary _vocabulary;
   };

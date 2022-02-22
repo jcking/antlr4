@@ -85,8 +85,7 @@ public:
   <endif>
 
 private:
-  static std::vector\<antlr4::dfa::DFA> _decisionToDFA;
-  static antlr4::atn::PredictionContextCache _sharedContextCache;
+  static std::vector\<antlr4::dfa::DFA>* _decisionToDFA;
   static std::vector\<std::string> _ruleNames;
   static std::vector\<std::string> _channelNames;
   static std::vector\<std::string> _modeNames;
@@ -113,7 +112,7 @@ private:
 
 Lexer(lexer, atn, actionFuncs, sempredFuncs, superClass = {Lexer}) ::= <<
 <lexer.name>::<lexer.name>(CharStream *input) : <superClass>(input) {
-  _interpreter = new atn::LexerATNSimulator(this, _atn, _decisionToDFA, _sharedContextCache);
+  _interpreter = new atn::LexerATNSimulator(this, *_atn, *_decisionToDFA);
 }
 
 <lexer.name>::~<lexer.name>() {
@@ -145,7 +144,7 @@ const std::vector\<uint16_t> <lexer.name>::getSerializedATN() const {
 }
 
 const atn::ATN& <lexer.name>::getATN() const {
-  return _atn;
+  return *_atn;
 }
 
 <namedActions.definitions>
@@ -178,11 +177,10 @@ bool <lexer.name>::sempred(RuleContext *context, size_t ruleIndex, size_t predic
 <sempredFuncs.values; separator="\n">
 
 // Static vars and initialization.
-std::vector\<dfa::DFA> <lexer.name>::_decisionToDFA;
-atn::PredictionContextCache <lexer.name>::_sharedContextCache;
+std::vector\<dfa::DFA>* <lexer.name>::_decisionToDFA;
 
 // We own the ATN which in turn owns the ATN states.
-atn::ATN <lexer.name>::_atn;
+atn::ATN* <lexer.name>::_atn;
 std::vector\<uint16_t> <lexer.name>::_serializedATN;
 
 std::vector\<std::string> <lexer.name>::_ruleNames = {
@@ -272,7 +270,7 @@ public:
   ~<parser.name>();
 
   virtual std::string getGrammarFileName() const override;
-  virtual const antlr4::atn::ATN& getATN() const override { return _atn; };
+  virtual const antlr4::atn::ATN& getATN() const override { return *_atn; };
   virtual const std::vector\<std::string>& getRuleNames() const override;
   virtual antlr4::dfa::Vocabulary& getVocabulary() const override;
 
@@ -288,8 +286,7 @@ public:
   <endif>
 
 private:
-  static std::vector\<antlr4::dfa::DFA> _decisionToDFA;
-  static antlr4::atn::PredictionContextCache _sharedContextCache;
+  static std::vector\<antlr4::dfa::DFA>* _decisionToDFA;
   static std::vector\<std::string> _ruleNames;
 
   static std::vector\<std::string> _literalNames;
@@ -310,7 +307,7 @@ Parser(parser, funcs, atn, sempredFuncs, superClass = {Parser}) ::= <<
 using namespace antlr4;
 
 <parser.name>::<parser.name>(TokenStream *input) : <superClass>(input) {
-  _interpreter = new atn::ParserATNSimulator(this, _atn, _decisionToDFA, _sharedContextCache);
+  _interpreter = new atn::ParserATNSimulator(this, *_atn, *_decisionToDFA);
 }
 
 <parser.name>::~<parser.name>() {
@@ -348,11 +345,10 @@ bool <parser.name>::sempred(RuleContext *context, size_t ruleIndex, size_t predi
 <sempredFuncs.values; separator="\n"><endif>
 
 // Static vars and initialization.
-std::vector\<dfa::DFA> <parser.name>::_decisionToDFA;
-atn::PredictionContextCache <parser.name>::_sharedContextCache;
+std::vector\<dfa::DFA>* <parser.name>::_decisionToDFA;
 
 // We own the ATN which in turn owns the ATN states.
-atn::ATN <parser.name>::_atn;
+atn::ATN* <parser.name>::_atn;
 std::vector\<uint16_t> <parser.name>::_serializedATN;
 
 std::vector\<std::string> <parser.name>::_ruleNames = {
@@ -377,7 +373,7 @@ dfa::Vocabulary <parser.name>::_vocabulary(_literalNames, _symbolicNames);
 >>
 
 SerializedATNHeader(model) ::= <<
-static antlr4::atn::ATN _atn;
+static antlr4::atn::ATN* _atn;
 static std::vector\<uint16_t> _serializedATN;
 >>
 
@@ -392,12 +388,13 @@ SerializedATN(model) ::= <<
 }>
 
 atn::ATNDeserializer deserializer;
-_atn = deserializer.deserialize(_serializedATN);
+_atn = deserializer.deserialize(_serializedATN).release();
 
-size_t count = _atn.getNumberOfDecisions();
-_decisionToDFA.reserve(count);
+size_t count = _atn->getNumberOfDecisions();
+_decisionToDFA = new std::vector<dfa::DFA>();
+_decisionToDFA->reserve(count);
 for (size_t i = 0; i \< count; i++) { <! Rework class ATN to allow standard iterations. !>
-  _decisionToDFA.emplace_back(_atn.getDecisionState(i), i);
+  _decisionToDFA->emplace_back(_atn->getDecisionState(i), i);
 }
 >>
 

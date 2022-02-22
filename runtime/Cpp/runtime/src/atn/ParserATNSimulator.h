@@ -10,6 +10,7 @@
 #include "atn/ATNSimulator.h"
 #include "atn/AnySemanticContext.h"
 #include "atn/AnyTransition.h"
+#include "atn/AnyPredictionContext.h"
 #include "atn/PredictionContext.h"
 #include "SemanticContext.h"
 #include "atn/ATNConfig.h"
@@ -247,11 +248,9 @@ namespace atn {
   class ANTLR4CPP_PUBLIC ParserATNSimulator : public ATNSimulator {
   public:
     /// Testing only!
-    ParserATNSimulator(const ATN &atn, std::vector<dfa::DFA> &decisionToDFA,
-                       PredictionContextCache &sharedContextCache);
+    ParserATNSimulator(const ATN &atn, std::vector<dfa::DFA> &decisionToDFA);
 
-    ParserATNSimulator(Parser *parser, const ATN &atn, std::vector<dfa::DFA> &decisionToDFA,
-                       PredictionContextCache &sharedContextCache);
+    ParserATNSimulator(Parser *parser, const ATN &atn, std::vector<dfa::DFA> &decisionToDFA);
 
     virtual void reset() override;
     virtual void clearDFA() override;
@@ -347,10 +346,10 @@ namespace atn {
      * parsing rule expr that we must use the precedence to get the
      * right interpretation and, hence, parse tree.
      */
-    bool canDropLoopEntryEdgeInLeftRecursiveRule(ATNConfig *config) const;
+    bool canDropLoopEntryEdgeInLeftRecursiveRule(const ATNConfig &config) const;
     virtual std::string getRuleName(size_t index);
 
-    virtual Ref<ATNConfig> precedenceTransition(Ref<ATNConfig> const& config, const PrecedencePredicateTransition &pt,
+    virtual ATNConfig precedenceTransition(const ATNConfig &config, const PrecedencePredicateTransition &pt,
                                                 bool collectPredicates, bool inContext, bool fullCtx);
 
     void setPredictionMode(PredictionMode newMode);
@@ -370,24 +369,13 @@ namespace atn {
     virtual void dumpDeadEndConfigs(NoViableAltException &nvae);
 
   protected:
-    Parser *const parser;
-
-    /// <summary>
-    /// Each prediction operation uses a cache for merge of prediction contexts.
-    /// Don't keep around as it wastes huge amounts of memory. The merge cache
-    /// isn't synchronized but we're ok since two threads shouldn't reuse same
-    /// parser/atnsim object because it can only handle one input at a time.
-    /// This maps graphs a and b to merged result c. (a,b)->c. We can avoid
-    /// the merge if we ever see a and b again.  Note that (b,a)->c should
-    /// also be examined during cache lookup.
-    /// </summary>
-    PredictionContextMergeCache mergeCache;
+    Parser *const parser = nullptr;
 
     // LAME globals to avoid parameters!!!!! I need these down deep in predTransition
-    TokenStream *_input;
-    size_t _startIndex;
-    ParserRuleContext *_outerContext;
-    dfa::DFA *_dfa; // Reference into the decisionToDFA vector.
+    TokenStream *_input = nullptr;
+    size_t _startIndex = 0;
+    ParserRuleContext *_outerContext = nullptr;
+    dfa::DFA *_dfa = nullptr; // Reference into the decisionToDFA vector.
 
     /// <summary>
     /// Performs ATN simulation to compute a predicted alternative based
@@ -451,10 +439,10 @@ namespace atn {
     virtual void predicateDFAState(dfa::DFAState *dfaState, DecisionState *decisionState);
 
     // comes back with reach.uniqueAlt set to a valid alt
-    virtual size_t execATNWithFullContext(dfa::DFA &dfa, dfa::DFAState *D, ATNConfigSet *s0,
+    virtual size_t execATNWithFullContext(dfa::DFA &dfa, dfa::DFAState *D, const ATNConfigSet &s0,
                                           TokenStream *input, size_t startIndex, ParserRuleContext *outerContext); // how far we got before failing over
 
-    virtual std::unique_ptr<ATNConfigSet> computeReachSet(ATNConfigSet *closure, size_t t, bool fullCtx);
+    virtual ATNConfigSet computeReachSet(const ATNConfigSet &closure, size_t t, bool fullCtx);
 
     /// <summary>
     /// Return a configuration set containing only the configurations from
@@ -475,183 +463,14 @@ namespace atn {
     /// <returns> {@code configs} if all configurations in {@code configs} are in a
     /// rule stop state, otherwise return a new configuration set containing only
     /// the configurations from {@code configs} which are in a rule stop state </returns>
-    virtual ATNConfigSet* removeAllConfigsNotInRuleStopState(ATNConfigSet *configs, bool lookToEndOfRule);
+    virtual ATNConfigSet removeAllConfigsNotInRuleStopState(const ATNConfigSet &configs, bool lookToEndOfRule);
 
-    virtual std::unique_ptr<ATNConfigSet> computeStartState(ATNState *p, RuleContext *ctx, bool fullCtx);
-
-    /* parrt internal source braindump that doesn't mess up
-     * external API spec.
-
-     applyPrecedenceFilter is an optimization to avoid highly
-     nonlinear prediction of expressions and other left recursive
-     rules. The precedence predicates such as {3>=prec}? Are highly
-     context-sensitive in that they can only be properly evaluated
-     in the context of the proper prec argument. Without pruning,
-     these predicates are normal predicates evaluated when we reach
-     conflict state (or unique prediction). As we cannot evaluate
-     these predicates out of context, the resulting conflict leads
-     to full LL evaluation and nonlinear prediction which shows up
-     very clearly with fairly large expressions.
-
-     Example grammar:
-
-     e : e '*' e
-     | e '+' e
-     | INT
-     ;
-
-     We convert that to the following:
-
-     e[int prec]
-     :   INT
-     ( {3>=prec}? '*' e[4]
-     | {2>=prec}? '+' e[3]
-     )*
-     ;
-
-     The (..)* loop has a decision for the inner block as well as
-     an enter or exit decision, which is what concerns us here. At
-     the 1st + of input 1+2+3, the loop entry sees both predicates
-     and the loop exit also sees both predicates by falling off the
-     edge of e.  This is because we have no stack information with
-     SLL and find the follow of e, which will hit the return states
-     inside the loop after e[4] and e[3], which brings it back to
-     the enter or exit decision. In this case, we know that we
-     cannot evaluate those predicates because we have fallen off
-     the edge of the stack and will in general not know which prec
-     parameter is the right one to use in the predicate.
-
-     Because we have special information, that these are precedence
-     predicates, we can resolve them without failing over to full
-     LL despite their context sensitive nature. We make an
-     assumption that prec[-1] <= prec[0], meaning that the current
-     precedence level is greater than or equal to the precedence
-     level of recursive invocations above us in the stack. For
-     example, if predicate {3>=prec}? is true of the current prec,
-     then one option is to enter the loop to match it now. The
-     other option is to exit the loop and the left recursive rule
-     to match the current operator in rule invocation further up
-     the stack. But, we know that all of those prec are lower or
-     the same value and so we can decide to enter the loop instead
-     of matching it later. That means we can strip out the other
-     configuration for the exit branch.
-
-     So imagine we have (14,1,$,{2>=prec}?) and then
-     (14,2,$-dipsIntoOuterContext,{2>=prec}?). The optimization
-     allows us to collapse these two configurations. We know that
-     if {2>=prec}? is true for the current prec parameter, it will
-     also be true for any prec from an invoking e call, indicated
-     by dipsIntoOuterContext. As the predicates are both true, we
-     have the option to evaluate them early in the decision start
-     state. We do this by stripping both predicates and choosing to
-     enter the loop as it is consistent with the notion of operator
-     precedence. It's also how the full LL conflict resolution
-     would work.
-
-     The solution requires a different DFA start state for each
-     precedence level.
-
-     The basic filter mechanism is to remove configurations of the
-     form (p, 2, pi) if (p, 1, pi) exists for the same p and pi. In
-     other words, for the same ATN state and predicate context,
-     remove any configuration associated with an exit branch if
-     there is a configuration associated with the enter branch.
-
-     It's also the case that the filter evaluates precedence
-     predicates and resolves conflicts according to precedence
-     levels. For example, for input 1+2+3 at the first +, we see
-     prediction filtering
-
-     [(11,1,[$],{3>=prec}?), (14,1,[$],{2>=prec}?), (5,2,[$],up=1),
-     (11,2,[$],up=1), (14,2,[$],up=1)],hasSemanticContext=true,dipsIntoOuterContext
-
-     to
-
-     [(11,1,[$]), (14,1,[$]), (5,2,[$],up=1)],dipsIntoOuterContext
-
-     This filters because {3>=prec}? evals to true and collapses
-     (11,1,[$],{3>=prec}?) and (11,2,[$],up=1) since early conflict
-     resolution based upon rules of operator precedence fits with
-     our usual match first alt upon conflict.
-
-     We noticed a problem where a recursive call resets precedence
-     to 0. Sam's fix: each config has flag indicating if it has
-     returned from an expr[0] call. then just don't filter any
-     config with that flag set. flag is carried along in
-     closure(). so to avoid adding field, set bit just under sign
-     bit of dipsIntoOuterContext (SUPPRESS_PRECEDENCE_FILTER).
-     With the change you filter "unless (p, 2, pi) was reached
-     after leaving the rule stop state of the LR rule containing
-     state p, corresponding to a rule invocation with precedence
-     level 0"
-     */
-
-    /**
-     * This method transforms the start state computed by
-     * {@link #computeStartState} to the special start state used by a
-     * precedence DFA for a particular precedence value. The transformation
-     * process applies the following changes to the start state's configuration
-     * set.
-     *
-     * <ol>
-     * <li>Evaluate the precedence predicates for each configuration using
-     * {@link SemanticContext#evalPrecedence}.</li>
-     * <li>When {@link ATNConfig#isPrecedenceFilterSuppressed} is {@code false},
-     * remove all configurations which predict an alternative greater than 1,
-     * for which another configuration that predicts alternative 1 is in the
-     * same ATN state with the same prediction context. This transformation is
-     * valid for the following reasons:
-     * <ul>
-     * <li>The closure block cannot contain any epsilon transitions which bypass
-     * the body of the closure, so all states reachable via alternative 1 are
-     * part of the precedence alternatives of the transformed left-recursive
-     * rule.</li>
-     * <li>The "primary" portion of a left recursive rule cannot contain an
-     * epsilon transition, so the only way an alternative other than 1 can exist
-     * in a state that is also reachable via alternative 1 is by nesting calls
-     * to the left-recursive rule, with the outer calls not being at the
-     * preferred precedence level. The
-     * {@link ATNConfig#isPrecedenceFilterSuppressed} property marks ATN
-     * configurations which do not meet this condition, and therefore are not
-     * eligible for elimination during the filtering process.</li>
-     * </ul>
-     * </li>
-     * </ol>
-     *
-     * <p>
-     * The prediction context must be considered by this filter to address
-     * situations like the following.
-     * </p>
-     * <code>
-     * <pre>
-     * grammar TA;
-     * prog: statement* EOF;
-     * statement: letterA | statement letterA 'b' ;
-     * letterA: 'a';
-     * </pre>
-     * </code>
-     * <p>
-     * If the above grammar, the ATN state immediately before the token
-     * reference {@code 'a'} in {@code letterA} is reachable from the left edge
-     * of both the primary and closure blocks of the left-recursive rule
-     * {@code statement}. The prediction context associated with each of these
-     * configurations distinguishes between them, and prevents the alternative
-     * which stepped out to {@code prog} (and then back in to {@code statement}
-     * from being eliminated by the filter.
-     * </p>
-     *
-     * @param configs The configuration set computed by
-     * {@link #computeStartState} as the start state for the DFA.
-     * @return The transformed configuration set representing the start state
-     * for a precedence DFA at a particular precedence level (determined by
-     * calling {@link Parser#getPrecedence}).
-     */
-    std::unique_ptr<ATNConfigSet> applyPrecedenceFilter(ATNConfigSet *configs);
+    virtual ATNConfigSet computeStartState(ATNState *p, RuleContext *ctx, bool fullCtx);
 
     virtual ATNState *getReachableTarget(const Transition &trans, size_t ttype);
 
     virtual std::vector<AnySemanticContext> getPredsForAmbigAlts(const antlrcpp::BitSet &ambigAlts,
-                                                                   ATNConfigSet *configs, size_t nalts);
+                                                                   const ATNConfigSet &configs, size_t nalts);
 
     virtual std::vector<dfa::DFAState::PredPrediction> getPredicatePredictions(const antlrcpp::BitSet &ambigAlts,
                                                                               const std::vector<AnySemanticContext> &altToPred);
@@ -702,10 +521,10 @@ namespace atn {
      * {@link ATN#INVALID_ALT_NUMBER} if a suitable alternative was not
      * identified and {@link #adaptivePredict} should report an error instead.
      */
-    size_t getSynValidOrSemInvalidAltThatFinishedDecisionEntryRule(ATNConfigSet *configs,
+    size_t getSynValidOrSemInvalidAltThatFinishedDecisionEntryRule(const ATNConfigSet &configs,
                                                                    ParserRuleContext *outerContext);
 
-    virtual size_t getAltThatFinishedDecisionEntryRule(ATNConfigSet *configs);
+    virtual size_t getAltThatFinishedDecisionEntryRule(const ATNConfigSet &configs);
 
     /** Walk the list of configurations and split them according to
      *  those that have preds evaluating to true/false.  If no pred, assume
@@ -716,8 +535,8 @@ namespace atn {
      *  Assumption: the input stream has been restored to the starting point
      *  prediction, which is where predicates need to evaluate.
      */
-    std::pair<ATNConfigSet *, ATNConfigSet *> splitAccordingToSemanticValidity(ATNConfigSet *configs,
-                                                                               ParserRuleContext *outerContext);
+    std::pair<ATNConfigSet, ATNConfigSet> splitAccordingToSemanticValidity(const ATNConfigSet &configs,
+                                                                           ParserRuleContext *outerContext);
 
     /// <summary>
     /// Look through a list of predicate/alt pairs, returning alts for the
@@ -768,24 +587,24 @@ namespace atn {
      waste to pursue the closure. Might have to advance when we do
      ambig detection thought :(
      */
-    virtual void closure(Ref<ATNConfig> const& config, ATNConfigSet *configs, ATNConfig::Set &closureBusy,
+    virtual void closure(const ATNConfig &config, ATNConfigSet *configs, std::unordered_set<ATNConfig> &closureBusy,
                          bool collectPredicates, bool fullCtx, bool treatEofAsEpsilon);
 
-    virtual void closureCheckingStopState(Ref<ATNConfig> const& config, ATNConfigSet *configs, ATNConfig::Set &closureBusy,
+    virtual void closureCheckingStopState(const ATNConfig &config, ATNConfigSet *configs, std::unordered_set<ATNConfig> &closureBusy,
                                           bool collectPredicates, bool fullCtx, int depth, bool treatEofAsEpsilon);
 
     /// Do the actual work of walking epsilon edges.
-    virtual void closure_(Ref<ATNConfig> const& config, ATNConfigSet *configs, ATNConfig::Set &closureBusy,
-                          bool collectPredicates, bool fullCtx, int depth, bool treatEofAsEpsilon);
+    virtual void closure(const ATNConfig &config, ATNConfigSet *configs, std::unordered_set<ATNConfig> &closureBusy,
+                        bool collectPredicates, bool fullCtx, int depth, bool treatEofAsEpsilon);
 
-    virtual Ref<ATNConfig> getEpsilonTarget(Ref<ATNConfig> const& config, const Transition &t, bool collectPredicates,
+    virtual std::optional<ATNConfig> getEpsilonTarget(const ATNConfig &config, const Transition &t, bool collectPredicates,
                                             bool inContext, bool fullCtx, bool treatEofAsEpsilon);
-    virtual Ref<ATNConfig> actionTransition(Ref<ATNConfig> const& config, const ActionTransition &t);
+    virtual ATNConfig actionTransition(const ATNConfig &config, const ActionTransition &t);
 
-    virtual Ref<ATNConfig> predTransition(Ref<ATNConfig> const& config, const PredicateTransition &pt, bool collectPredicates,
+    virtual ATNConfig predTransition(const ATNConfig &config, const PredicateTransition &pt, bool collectPredicates,
                                           bool inContext, bool fullCtx);
 
-    virtual Ref<ATNConfig> ruleTransition(Ref<ATNConfig> const& config, const RuleTransition &t);
+    virtual ATNConfig ruleTransition(const ATNConfig &config, const RuleTransition &t);
 
     /**
      * Gets a {@link BitSet} containing the alternatives in {@code configs}
@@ -796,7 +615,7 @@ namespace atn {
      * conflicting alternative subsets. If {@code configs} does not contain any
      * conflicting subsets, this method returns an empty {@link BitSet}.
      */
-    virtual antlrcpp::BitSet getConflictingAlts(ATNConfigSet *configs);
+    virtual antlrcpp::BitSet getConflictingAlts(const ATNConfigSet &configs);
 
     /// <summary>
     /// Sam pointed out a problem with the previous definition, v3, of
@@ -835,12 +654,12 @@ namespace atn {
     /// that we still need to pursue.
     /// </summary>
 
-    virtual antlrcpp::BitSet getConflictingAltsOrUniqueAlt(ATNConfigSet *configs);
+    virtual antlrcpp::BitSet getConflictingAltsOrUniqueAlt(const ATNConfigSet &configs) const;
 
     virtual NoViableAltException noViableAlt(TokenStream *input, ParserRuleContext *outerContext,
-                                              ATNConfigSet *configs, size_t startIndex, bool deleteConfigs);
+                                            const ATNConfigSet &configs, size_t startIndex);
 
-    static size_t getUniqueAlt(ATNConfigSet *configs);
+    static size_t getUniqueAlt(const ATNConfigSet &configs);
 
     /// <summary>
     /// Add an edge to the DFA, if possible. This method calls
@@ -861,28 +680,12 @@ namespace atn {
     /// <returns> If {@code to} is {@code null}, this method returns {@code null};
     /// otherwise this method returns the result of calling <seealso cref="#addDFAState"/>
     /// on {@code to} </returns>
-    virtual dfa::DFAState *addDFAEdge(dfa::DFA &dfa, dfa::DFAState *from, ssize_t t, dfa::DFAState *to);
-
-    /// <summary>
-    /// Add state {@code D} to the DFA if it is not already present, and return
-    /// the actual instance stored in the DFA. If a state equivalent to {@code D}
-    /// is already in the DFA, the existing state is returned. Otherwise this
-    /// method returns {@code D} after adding it to the DFA.
-    /// <p/>
-    /// If {@code D} is <seealso cref="#ERROR"/>, this method returns <seealso cref="#ERROR"/> and
-    /// does not change the DFA.
-    /// </summary>
-    /// <param name="dfa"> The dfa </param>
-    /// <param name="D"> The DFA state to add </param>
-    /// <returns> The state stored in the DFA. This will be either the existing
-    /// state if {@code D} is already in the DFA, or {@code D} itself if the
-    /// state was not already present. </returns>
-    virtual dfa::DFAState *addDFAState(dfa::DFA &dfa, dfa::DFAState *D);
+    virtual dfa::DFAState *addDFAEdge(dfa::DFA &dfa, dfa::DFAState *from, ssize_t t, std::unique_ptr<dfa::DFAState> to);
 
     virtual void reportAttemptingFullContext(dfa::DFA &dfa, const antlrcpp::BitSet &conflictingAlts,
-      ATNConfigSet *configs, size_t startIndex, size_t stopIndex);
+      const ATNConfigSet &configs, size_t startIndex, size_t stopIndex);
 
-    virtual void reportContextSensitivity(dfa::DFA &dfa, size_t prediction, ATNConfigSet *configs,
+    virtual void reportContextSensitivity(dfa::DFA &dfa, size_t prediction, const ATNConfigSet &configs,
                                           size_t startIndex, size_t stopIndex);
 
     /// If context sensitive parsing, we know it's ambiguity not conflict.
@@ -891,14 +694,13 @@ namespace atn {
                                  size_t startIndex, size_t stopIndex,
                                  bool exact,
                                  const antlrcpp::BitSet &ambigAlts,
-                                 ATNConfigSet *configs); // configs that LL not SLL considered conflicting
+                                 const ATNConfigSet &configs); // configs that LL not SLL considered conflicting
 
   private:
     // SLL, LL, or LL + exact ambig detection?
-    PredictionMode _mode;
+    PredictionMode _mode = PredictionMode::LL;
 
     static bool getLrLoopSetting();
-    void InitializeInstanceFields();
   };
 
 } // namespace atn

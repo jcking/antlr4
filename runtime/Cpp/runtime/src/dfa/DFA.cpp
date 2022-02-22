@@ -25,7 +25,7 @@ DFA::DFA(atn::DecisionState *atnStartState, size_t decision)
   if (is<atn::StarLoopEntryState *>(atnStartState)) {
     if (static_cast<atn::StarLoopEntryState *>(atnStartState)->isPrecedenceDecision) {
       _precedenceDfa = true;
-      s0 = new DFAState(std::unique_ptr<atn::ATNConfigSet>(new atn::ATNConfigSet()));
+      s0 = new DFAState(atn::ATNConfigSet());
       s0->isAcceptState = false;
       s0->requiresFullContext = false;
     }
@@ -44,16 +44,35 @@ DFA::DFA(DFA &&other) : atnStartState(other.atnStartState), s0(other.s0), decisi
 }
 
 DFA::~DFA() {
-  bool s0InList = (s0 == nullptr);
-  for (auto *state : states) {
-    if (state == s0)
-      s0InList = true;
-    delete state;
+  auto ds0 = std::unique_ptr<DFAState>(s0);
+  if (ds0 != nullptr) {
+    auto existing = states.find(ds0);
+    if (existing != states.end()) {
+      ds0.release();
+    }
   }
+}
 
-  if (!s0InList) {
-    delete s0;
+DFA& DFA::operator=(DFA &&other) {
+  auto ds0 = std::unique_ptr<DFAState>(s0);
+  if (ds0 != nullptr) {
+    auto existing = states.find(ds0);
+    if (existing != states.end()) {
+      ds0.release();
+    }
   }
+  atnStartState = other.atnStartState;
+  s0 = other.s0;
+  decision = other.decision;
+  // Source states are implicitly cleared by the move.
+  states = std::move(other.states);
+
+  other.atnStartState = nullptr;
+  other.decision = 0;
+  other.s0 = nullptr;
+  _precedenceDfa = other._precedenceDfa;
+  other._precedenceDfa = false;
+  return *this;
 }
 
 bool DFA::isPrecedenceDfa() const {
@@ -88,11 +107,13 @@ void DFA::setPrecedenceStartState(int precedence, DFAState *startState, std::sha
 
 std::vector<DFAState *> DFA::getStates() const {
   std::vector<DFAState *> result;
-  for (auto *state : states)
-    result.push_back(state);
+  result.reserve(states.size());
+  for (const auto &state : states) {
+    result.push_back(state.get());
+  }
 
-  std::sort(result.begin(), result.end(), [](DFAState *o1, DFAState *o2) -> bool {
-    return o1->stateNumber < o2->stateNumber;
+  std::stable_sort(result.begin(), result.end(), [](const DFAState *lhs, const DFAState *rhs) -> bool {
+    return lhs->stateNumber < rhs->stateNumber;
   });
 
   return result;

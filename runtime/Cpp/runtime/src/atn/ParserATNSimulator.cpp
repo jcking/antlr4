@@ -47,16 +47,12 @@ using namespace antlrcpp;
 
 const bool ParserATNSimulator::TURN_OFF_LR_LOOP_ENTRY_BRANCH_OPT = ParserATNSimulator::getLrLoopSetting();
 
-ParserATNSimulator::ParserATNSimulator(const ATN &atn, std::vector<dfa::DFA> &decisionToDFA,
-                                       PredictionContextCache &sharedContextCache)
-: ParserATNSimulator(nullptr, atn, decisionToDFA, sharedContextCache) {
+ParserATNSimulator::ParserATNSimulator(const ATN &atn, std::vector<dfa::DFA> &decisionToDFA)
+: ParserATNSimulator(nullptr, atn, decisionToDFA) {
 }
 
-ParserATNSimulator::ParserATNSimulator(Parser *parser, const ATN &atn, std::vector<dfa::DFA> &decisionToDFA,
-                                       PredictionContextCache &sharedContextCache)
-: ATNSimulator(atn, sharedContextCache), decisionToDFA(decisionToDFA), parser(parser) {
-  InitializeInstanceFields();
-}
+ParserATNSimulator::ParserATNSimulator(Parser *parser, const ATN &atn, std::vector<dfa::DFA> &decisionToDFA)
+: ATNSimulator(atn), decisionToDFA(decisionToDFA), parser(parser) {}
 
 void ParserATNSimulator::reset() {
 }
@@ -88,61 +84,15 @@ size_t ParserATNSimulator::adaptivePredict(TokenStream *input, size_t decision, 
   // Now we are certain to have a specific decision's DFA
   // But, do we still need an initial state?
   auto onExit = finally([this, input, index, m] {
-    mergeCache.clear(); // wack cache after each prediction
     _dfa = nullptr;
     input->seek(index);
     input->release(m);
   });
 
-  dfa::DFAState *s0;
-  {
-    std::shared_lock<std::shared_mutex> stateLock(_stateLock);
-    if (dfa.isPrecedenceDfa()) {
-      // the start state for a precedence DFA depends on the current
-      // parser precedence, and is provided by a DFA method.
-      std::shared_lock<std::shared_mutex> edgeLock(_edgeLock);
-      s0 = dfa.getPrecedenceStartState(parser->getPrecedence());
-    } else {
-      // the start state for a "regular" DFA is just s0
-      s0 = dfa.s0;
-    }
-  }
+  dfa::DFAState *s0 = atn.getParserStartState(dfa, *parser);
 
   if (s0 == nullptr) {
-    bool fullCtx = false;
-    std::unique_ptr<ATNConfigSet> s0_closure = computeStartState(dfa.atnStartState,
-                                                                 &ParserRuleContext::EMPTY, fullCtx);
-
-    _stateLock.lock();
-    dfa::DFAState* ds0 = dfa.s0;
-    if (dfa.isPrecedenceDfa()) {
-      /* If this is a precedence DFA, we use applyPrecedenceFilter
-       * to convert the computed start state to a precedence start
-       * state. We then use DFA.setPrecedenceStartState to set the
-       * appropriate start state for the precedence level rather
-       * than simply setting DFA.s0.
-       */
-      ds0->configs = std::move(s0_closure); // not used for prediction but useful to know start configs anyway
-      dfa::DFAState *newState = new dfa::DFAState(applyPrecedenceFilter(ds0->configs.get())); /* mem-check: managed by the DFA or deleted below */
-      s0 = addDFAState(dfa, newState);
-      dfa.setPrecedenceStartState(parser->getPrecedence(), s0, _edgeLock);
-      if (s0 != newState) {
-        delete newState; // If there was already a state with this config set we don't need the new one.
-      }
-    } else {
-      dfa::DFAState *newState = new dfa::DFAState(std::move(s0_closure)); /* mem-check: managed by the DFA or deleted below */
-      s0 = addDFAState(dfa, newState);
-
-      if (ds0 != s0) {
-        delete ds0; // Delete existing s0 DFA state, if there's any.
-        ds0 = nullptr;
-        dfa.s0 = s0;
-      }
-      if (s0 != newState) {
-        delete newState; // If there was already a state with this config set we don't need the new one.
-      }
-    }
-    _stateLock.unlock();
+    s0 = atn.updateParserStartState(dfa, computeStartState(dfa.atnStartState, &ParserRuleContext::EMPTY, false), parser, _outerContext);
   }
 
   // We can start with an existing DFA.
@@ -183,14 +133,13 @@ size_t ParserATNSimulator::execATN(dfa::DFA &dfa, dfa::DFAState *s0, TokenStream
       // ATN states in SLL implies LL will also get nowhere.
       // If conflict in states that dip out, choose min since we
       // will get error no matter what.
-      NoViableAltException e = noViableAlt(input, outerContext, previousD->configs.get(), startIndex, false);
       input->seek(startIndex);
-      size_t alt = getSynValidOrSemInvalidAltThatFinishedDecisionEntryRule(previousD->configs.get(), outerContext);
+      size_t alt = getSynValidOrSemInvalidAltThatFinishedDecisionEntryRule(previousD->configs, outerContext);
       if (alt != ATN::INVALID_ALT_NUMBER) {
         return alt;
       }
 
-      throw e;
+      throw noViableAlt(input, outerContext, previousD->configs, startIndex);
     }
 
     if (D->requiresFullContext && _mode != PredictionMode::SLL) {
@@ -212,7 +161,7 @@ size_t ParserATNSimulator::execATN(dfa::DFA &dfa, dfa::DFAState *s0, TokenStream
             std::cout << "Full LL avoided" << std::endl;
 #endif
 
-          return conflictingAlts.nextSetBit(0);
+          return conflictingAlts.find().value_or(INVALID_INDEX);
         }
 
         if (conflictIndex != startIndex) {
@@ -227,9 +176,9 @@ size_t ParserATNSimulator::execATN(dfa::DFA &dfa, dfa::DFAState *s0, TokenStream
 #endif
 
       bool fullCtx = true;
-      std::unique_ptr<ATNConfigSet> s0_closure = computeStartState(dfa.atnStartState, outerContext, fullCtx);
-      reportAttemptingFullContext(dfa, conflictingAlts, D->configs.get(), startIndex, input->index());
-      size_t alt = execATNWithFullContext(dfa, D, s0_closure.get(), input, startIndex, outerContext);
+      ATNConfigSet s0_closure = computeStartState(dfa.atnStartState, outerContext, fullCtx);
+      reportAttemptingFullContext(dfa, conflictingAlts, D->configs, startIndex, input->index());
+      size_t alt = execATNWithFullContext(dfa, D, s0_closure, input, startIndex, outerContext);
       return alt;
     }
 
@@ -243,16 +192,16 @@ size_t ParserATNSimulator::execATN(dfa::DFA &dfa, dfa::DFAState *s0, TokenStream
       BitSet alts = evalSemanticContext(D->predicates, outerContext, true);
       switch (alts.count()) {
         case 0:
-          throw noViableAlt(input, outerContext, D->configs.get(), startIndex, false);
+          throw noViableAlt(input, outerContext, D->configs, startIndex);
 
         case 1:
-          return alts.nextSetBit(0);
+          return alts.find().value_or(INVALID_INDEX);
 
         default:
           // report ambiguity after predicate evaluation to make sure the correct
           // set of ambig alts is reported.
-          reportAmbiguity(dfa, D, startIndex, stopIndex, false, alts, D->configs.get());
-          return alts.nextSetBit(0);
+          reportAmbiguity(dfa, D, startIndex, stopIndex, false, alts, D->configs);
+          return alts.find().value_or(INVALID_INDEX);
       }
     }
 
@@ -266,52 +215,43 @@ size_t ParserATNSimulator::execATN(dfa::DFA &dfa, dfa::DFAState *s0, TokenStream
 }
 
 dfa::DFAState *ParserATNSimulator::getExistingTargetState(dfa::DFAState *previousD, size_t t) {
-  dfa::DFAState* retval;
-  _edgeLock.lock_shared();
-  auto iterator = previousD->edges.find(t);
-  retval = (iterator == previousD->edges.end()) ? nullptr : iterator->second;
-  _edgeLock.unlock_shared();
-  return retval;
+  return atn.getParserExistingTargetState(*previousD, t);
 }
 
 dfa::DFAState *ParserATNSimulator::computeTargetState(dfa::DFA &dfa, dfa::DFAState *previousD, size_t t) {
-  std::unique_ptr<ATNConfigSet> reach = computeReachSet(previousD->configs.get(), t, false);
-  if (reach == nullptr) {
-    addDFAEdge(dfa, previousD, t, ERROR.get());
+  ATNConfigSet reach = computeReachSet(previousD->configs, t, false);
+  if (reach.isEmpty()) {
+    addDFAEdge(dfa, previousD, t, std::unique_ptr<dfa::DFAState>(ERROR.get()));
     return ERROR.get();
   }
 
   // create new target state; we'll add to DFA after it's complete
-  dfa::DFAState *D = new dfa::DFAState(std::move(reach)); /* mem-check: managed by the DFA or deleted below, "reach" is no longer valid now. */
-  size_t predictedAlt = getUniqueAlt(D->configs.get());
+  auto D = std::make_unique<dfa::DFAState>(std::move(reach)); /* mem-check: managed by the DFA or deleted below, "reach" is no longer valid now. */
+  size_t predictedAlt = getUniqueAlt(D->configs);
 
   if (predictedAlt != ATN::INVALID_ALT_NUMBER) {
     // NO CONFLICT, UNIQUELY PREDICTED ALT
     D->isAcceptState = true;
-    D->configs->uniqueAlt = predictedAlt;
+    D->configs.uniqueAlt = predictedAlt;
     D->prediction = predictedAlt;
-  } else if (PredictionModeClass::hasSLLConflictTerminatingPrediction(_mode, D->configs.get())) {
+  } else if (PredictionModeClass::hasSLLConflictTerminatingPrediction(_mode, D->configs)) {
     // MORE THAN ONE VIABLE ALTERNATIVE
-    D->configs->conflictingAlts = getConflictingAlts(D->configs.get());
+    D->configs.conflictingAlts = getConflictingAlts(D->configs);
     D->requiresFullContext = true;
     // in SLL-only mode, we will stop at this state and return the minimum alt
     D->isAcceptState = true;
-    D->prediction = D->configs->conflictingAlts.nextSetBit(0);
+    D->prediction = D->configs.conflictingAlts.find().value_or(INVALID_INDEX);
   }
 
-  if (D->isAcceptState && D->configs->hasSemanticContext) {
-    predicateDFAState(D, atn.getDecisionState(dfa.decision));
+  if (D->isAcceptState && D->configs.hasSemanticContext) {
+    predicateDFAState(D.get(), atn.getDecisionState(dfa.decision));
     if (D->predicates.size() != 0) {
       D->prediction = ATN::INVALID_ALT_NUMBER;
     }
   }
 
   // all adds to dfa are done after we've created full D state
-  dfa::DFAState *state = addDFAEdge(dfa, previousD, t, D);
-  if (state != D) {
-    delete D; // If the new state exists already we don't need it and use the existing one instead.
-  }
-  return state;
+  return addDFAEdge(dfa, previousD, t, std::move(D));
 }
 
 void ParserATNSimulator::predicateDFAState(dfa::DFAState *dfaState, DecisionState *decisionState) {
@@ -321,8 +261,8 @@ void ParserATNSimulator::predicateDFAState(dfa::DFAState *dfaState, DecisionStat
 
   // Update DFA so reach becomes accept state with (predicate,alt)
   // pairs if preds found for conflicting alts
-  BitSet altsToCollectPredsFrom = getConflictingAltsOrUniqueAlt(dfaState->configs.get());
-  std::vector<AnySemanticContext> altToPred = getPredsForAmbigAlts(altsToCollectPredsFrom, dfaState->configs.get(), nalts);
+  BitSet altsToCollectPredsFrom = getConflictingAltsOrUniqueAlt(dfaState->configs);
+  std::vector<AnySemanticContext> altToPred = getPredsForAmbigAlts(altsToCollectPredsFrom, dfaState->configs, nalts);
   if (!altToPred.empty()) {
     dfaState->predicates = getPredicatePredictions(altsToCollectPredsFrom, altToPred);
     dfaState->prediction = ATN::INVALID_ALT_NUMBER; // make sure we use preds
@@ -330,25 +270,25 @@ void ParserATNSimulator::predicateDFAState(dfa::DFAState *dfaState, DecisionStat
     // There are preds in configs but they might go away
     // when OR'd together like {p}? || NONE == NONE. If neither
     // alt has preds, resolve to min alt
-    dfaState->prediction = altsToCollectPredsFrom.nextSetBit(0);
+    dfaState->prediction = altsToCollectPredsFrom.find().value_or(INVALID_INDEX);
   }
 }
 
-size_t ParserATNSimulator::execATNWithFullContext(dfa::DFA &dfa, dfa::DFAState *D, ATNConfigSet *s0,
+size_t ParserATNSimulator::execATNWithFullContext(dfa::DFA &dfa, dfa::DFAState *D, const ATNConfigSet &s0,
   TokenStream *input, size_t startIndex, ParserRuleContext *outerContext) {
 
   bool fullCtx = true;
   bool foundExactAmbig = false;
 
-  std::unique_ptr<ATNConfigSet> reach;
-  ATNConfigSet *previous = s0;
+  ATNConfigSet reach;
+  ATNConfigSet previous = s0;
   input->seek(startIndex);
   size_t t = input->LA(1);
   size_t predictedAlt;
 
   while (true) {
     reach = computeReachSet(previous, t, fullCtx);
-    if (reach == nullptr) {
+    if (reach.isEmpty()) {
       // if any configs in previous dipped into outer context, that
       // means that input up to t actually finished entry rule
       // at least for LL decision. Full LL doesn't dip into outer
@@ -358,23 +298,20 @@ size_t ParserATNSimulator::execATNWithFullContext(dfa::DFA &dfa, dfa::DFAState *
       // ATN states in SLL implies LL will also get nowhere.
       // If conflict in states that dip out, choose min since we
       // will get error no matter what.
-      NoViableAltException e = noViableAlt(input, outerContext, previous, startIndex, previous != s0);
       input->seek(startIndex);
       size_t alt = getSynValidOrSemInvalidAltThatFinishedDecisionEntryRule(previous, outerContext);
       if (alt != ATN::INVALID_ALT_NUMBER) {
         return alt;
       }
-      throw e;
+      throw noViableAlt(input, outerContext, previous, startIndex);
     }
-    if (previous != s0) // Don't delete the start set.
-        delete previous;
-    previous = nullptr;
+    previous = ATNConfigSet();
 
-    std::vector<BitSet> altSubSets = PredictionModeClass::getConflictingAltSubsets(reach.get());
-    reach->uniqueAlt = getUniqueAlt(reach.get());
+    std::vector<BitSet> altSubSets = PredictionModeClass::getConflictingAltSubsets(reach);
+    reach.uniqueAlt = getUniqueAlt(reach);
     // unique prediction?
-    if (reach->uniqueAlt != ATN::INVALID_ALT_NUMBER) {
-      predictedAlt = reach->uniqueAlt;
+    if (reach.uniqueAlt != ATN::INVALID_ALT_NUMBER) {
+      predictedAlt = reach.uniqueAlt;
       break;
     }
     if (_mode != PredictionMode::LL_EXACT_AMBIG_DETECTION) {
@@ -394,7 +331,7 @@ size_t ParserATNSimulator::execATNWithFullContext(dfa::DFA &dfa, dfa::DFAState *
       // we're not sure what the ambiguity is yet.
       // So, keep going.
     }
-    previous = reach.release();
+    previous = reach;
 
     if (t != Token::EOF) {
       input->consume();
@@ -405,8 +342,8 @@ size_t ParserATNSimulator::execATNWithFullContext(dfa::DFA &dfa, dfa::DFAState *
   // If the configuration set uniquely predicts an alternative,
   // without conflict, then we know that it's a full LL decision
   // not SLL.
-  if (reach->uniqueAlt != ATN::INVALID_ALT_NUMBER) {
-    reportContextSensitivity(dfa, predictedAlt, reach.get(), startIndex, input->index());
+  if (reach.uniqueAlt != ATN::INVALID_ALT_NUMBER) {
+    reportContextSensitivity(dfa, predictedAlt, reach, startIndex, input->index());
     return predictedAlt;
   }
 
@@ -437,14 +374,14 @@ size_t ParserATNSimulator::execATNWithFullContext(dfa::DFA &dfa, dfa::DFAState *
    the fact that we should predict alternative 1.  We just can't say for
    sure that there is an ambiguity without looking further.
    */
-  reportAmbiguity(dfa, D, startIndex, input->index(), foundExactAmbig, reach->getAlts(), reach.get());
+  reportAmbiguity(dfa, D, startIndex, input->index(), foundExactAmbig, reach.getAlts(), reach);
 
   return predictedAlt;
 }
 
-std::unique_ptr<ATNConfigSet> ParserATNSimulator::computeReachSet(ATNConfigSet *closure_, size_t t, bool fullCtx) {
+ATNConfigSet ParserATNSimulator::computeReachSet(const ATNConfigSet &closure_, size_t t, bool fullCtx) {
 
-  std::unique_ptr<ATNConfigSet> intermediate(new ATNConfigSet(fullCtx));
+  ATNConfigSet intermediate(fullCtx);
 
   /* Configurations already in a rule stop state indicate reaching the end
    * of the decision rule (local context) or end of the start rule (full
@@ -456,32 +393,32 @@ std::unique_ptr<ATNConfigSet> ParserATNSimulator::computeReachSet(ATNConfigSet *
    * ensure that the alternative matching the longest overall sequence is
    * chosen when multiple such configurations can match the input.
    */
-  std::vector<Ref<ATNConfig>> skippedStopStates;
+  std::vector<const ATNConfig*> skippedStopStates;
 
   // First figure out where we can reach on input t
-  for (const auto &c : closure_->configs) {
-    if (is<RuleStopState *>(c->state)) {
-      assert(c->context->isEmpty());
+  for (const auto &c : closure_) {
+    if (c.state->getStateType() == ATNState::RULE_STOP) {
+      assert(c.context.isEmpty());
 
       if (fullCtx || t == Token::EOF) {
-        skippedStopStates.push_back(c);
+        skippedStopStates.push_back(&c);
       }
 
       continue;
     }
 
-    size_t n = c->state->transitions.size();
+    size_t n = c.state->transitions.size();
     for (size_t ti = 0; ti < n; ti++) { // for each transition
-      const AnyTransition &trans = c->state->transitions[ti];
+      const AnyTransition &trans = c.state->transitions[ti];
       ATNState *target = getReachableTarget(trans, (int)t);
       if (target != nullptr) {
-        intermediate->add(std::make_shared<ATNConfig>(*c, target), &mergeCache);
+        intermediate.add(ATNConfig(c, target));
       }
     }
   }
 
   // Now figure out where the reach operation can take us...
-  std::unique_ptr<ATNConfigSet> reach;
+  ATNConfigSet reach;
 
   /* This block optimizes the reach operation for intermediate sets which
    * trivially indicate a termination state for the overall
@@ -493,13 +430,13 @@ std::unique_ptr<ATNConfigSet> ParserATNSimulator::computeReachSet(ATNConfigSet *
    * withheld in skippedStopStates, or when the current symbol is EOF.
    */
   if (skippedStopStates.empty() && t != Token::EOF) {
-    if (intermediate->size() == 1) {
+    if (intermediate.size() == 1) {
       // Don't pursue the closure if there is just one state.
       // It can only have one alternative; just add to result
       // Also don't pursue the closure if there is unique alternative
       // among the configurations.
       reach = std::move(intermediate);
-    } else if (getUniqueAlt(intermediate.get()) != ATN::INVALID_ALT_NUMBER) {
+    } else if (getUniqueAlt(intermediate) != ATN::INVALID_ALT_NUMBER) {
       // Also don't pursue the closure if there is unique alternative
       // among the configurations.
       reach = std::move(intermediate);
@@ -509,13 +446,12 @@ std::unique_ptr<ATNConfigSet> ParserATNSimulator::computeReachSet(ATNConfigSet *
   /* If the reach set could not be trivially determined, perform a closure
    * operation on the intermediate set to compute its initial value.
    */
-  if (reach == nullptr) {
-    reach.reset(new ATNConfigSet(fullCtx));
-    ATNConfig::Set closureBusy;
+  if (reach.isEmpty()) {
+    std::unordered_set<ATNConfig> closureBusy;
 
     bool treatEofAsEpsilon = t == Token::EOF;
-    for (const auto &c : intermediate->configs) {
-      closure(c, reach.get(), closureBusy, false, fullCtx, treatEofAsEpsilon);
+    for (const auto &c : intermediate) {
+      closure(c, &reach, closureBusy, false, fullCtx, treatEofAsEpsilon);
     }
   }
 
@@ -537,9 +473,7 @@ std::unique_ptr<ATNConfigSet> ParserATNSimulator::computeReachSet(ATNConfigSet *
      * already guaranteed to meet this condition whether or not it's
      * required.
      */
-    ATNConfigSet *temp = removeAllConfigsNotInRuleStopState(reach.get(), *reach == *intermediate);
-    if (temp != reach.get())
-      reach.reset(temp); // We got a new set, so use that.
+    reach = removeAllConfigsNotInRuleStopState(reach, reach == intermediate);
   }
 
   /* If skippedStopStates is not null, then it contains at least one
@@ -550,39 +484,35 @@ std::unique_ptr<ATNConfigSet> ParserATNSimulator::computeReachSet(ATNConfigSet *
    * chooses an alternative matching the longest overall sequence when
    * multiple alternatives are viable.
    */
-  if (skippedStopStates.size() > 0 && (!fullCtx || !PredictionModeClass::hasConfigInRuleStopState(reach.get()))) {
+  if (skippedStopStates.size() > 0 && (!fullCtx || !PredictionModeClass::hasConfigInRuleStopState(reach))) {
     assert(!skippedStopStates.empty());
 
-    for (const auto &c : skippedStopStates) {
-      reach->add(c, &mergeCache);
+    for (const auto *c : skippedStopStates) {
+      reach.add(*c);
     }
-  }
-
-  if (reach->isEmpty()) {
-    return nullptr;
   }
   return reach;
 }
 
-ATNConfigSet* ParserATNSimulator::removeAllConfigsNotInRuleStopState(ATNConfigSet *configs,
+ATNConfigSet ParserATNSimulator::removeAllConfigsNotInRuleStopState(const ATNConfigSet &configs,
   bool lookToEndOfRule) {
   if (PredictionModeClass::allConfigsInRuleStopStates(configs)) {
     return configs;
   }
 
-  ATNConfigSet *result = new ATNConfigSet(configs->fullCtx); /* mem-check: released by caller */
+  ATNConfigSet result(configs.fullCtx); /* mem-check: released by caller */
 
-  for (const auto &config : configs->configs) {
-    if (is<RuleStopState*>(config->state)) {
-      result->add(config, &mergeCache);
+  for (const auto &config : configs) {
+    if (config.state->getStateType() == ATNState::RULE_STOP) {
+      result.add(config);
       continue;
     }
 
-    if (lookToEndOfRule && config->state->epsilonOnlyTransitions) {
-      misc::IntervalSet nextTokens = atn.nextTokens(config->state);
+    if (lookToEndOfRule && config.state->epsilonOnlyTransitions) {
+      const misc::IntervalSet &nextTokens = atn.nextTokens(config.state);
       if (nextTokens.contains(Token::EPSILON)) {
-        ATNState *endOfRuleState = atn.ruleToStopState[config->state->ruleIndex];
-        result->add(std::make_shared<ATNConfig>(*config, endOfRuleState), &mergeCache);
+        ATNState *endOfRuleState = atn.ruleToStopState[config.state->ruleIndex];
+        result.add(ATNConfig(config, endOfRuleState));
       }
     }
   }
@@ -590,67 +520,19 @@ ATNConfigSet* ParserATNSimulator::removeAllConfigsNotInRuleStopState(ATNConfigSe
   return result;
 }
 
-std::unique_ptr<ATNConfigSet> ParserATNSimulator::computeStartState(ATNState *p, RuleContext *ctx, bool fullCtx) {
+ATNConfigSet ParserATNSimulator::computeStartState(ATNState *p, RuleContext *ctx, bool fullCtx) {
   // always at least the implicit call to start rule
-  Ref<const PredictionContext> initialContext = PredictionContext::fromRuleContext(atn, ctx);
-  std::unique_ptr<ATNConfigSet> configs(new ATNConfigSet(fullCtx));
+  AnyPredictionContext initialContext = PredictionContext::fromRuleContext(atn, ctx);
+  ATNConfigSet configs(fullCtx);
 
   for (size_t i = 0; i < p->transitions.size(); i++) {
     ATNState *target = p->transitions[i].getTarget();
-    Ref<ATNConfig> c = std::make_shared<ATNConfig>(target, (int)i + 1, initialContext);
-    ATNConfig::Set closureBusy;
-    closure(c, configs.get(), closureBusy, true, fullCtx, false);
+    ATNConfig c = ATNConfig(target, (int)i + 1, initialContext);
+    std::unordered_set<ATNConfig> closureBusy;
+    closure(c, &configs, closureBusy, true, fullCtx, false);
   }
 
   return configs;
-}
-
-std::unique_ptr<ATNConfigSet> ParserATNSimulator::applyPrecedenceFilter(ATNConfigSet *configs) {
-  std::map<size_t, Ref<const PredictionContext>> statesFromAlt1;
-  std::unique_ptr<ATNConfigSet> configSet(new ATNConfigSet(configs->fullCtx));
-  for (const auto &config : configs->configs) {
-    // handle alt 1 first
-    if (config->alt != 1) {
-      continue;
-    }
-
-    AnySemanticContext updatedContext = config->semanticContext.evalPrecedence(parser, _outerContext);
-    if (!updatedContext) {
-      // the configuration was eliminated
-      continue;
-    }
-
-    statesFromAlt1[config->state->stateNumber] = config->context;
-    if (updatedContext != config->semanticContext) {
-      configSet->add(std::make_shared<ATNConfig>(*config, updatedContext), &mergeCache);
-    }
-    else {
-      configSet->add(config, &mergeCache);
-    }
-  }
-
-  for (const auto &config : configs->configs) {
-    if (config->alt == 1) {
-      // already handled
-      continue;
-    }
-
-    if (!config->isPrecedenceFilterSuppressed()) {
-      /* In the future, this elimination step could be updated to also
-       * filter the prediction context for alternatives predicting alt>1
-       * (basically a graph subtraction algorithm).
-       */
-      auto iterator = statesFromAlt1.find(config->state->stateNumber);
-      if (iterator != statesFromAlt1.end() && *iterator->second == *config->context) {
-        // eliminated
-        continue;
-      }
-    }
-
-    configSet->add(config, &mergeCache);
-  }
-
-  return configSet;
 }
 
 atn::ATNState* ParserATNSimulator::getReachableTarget(const Transition &trans, size_t ttype) {
@@ -663,7 +545,7 @@ atn::ATNState* ParserATNSimulator::getReachableTarget(const Transition &trans, s
 
 // Note that caller must memory manage the returned value from this function
 std::vector<AnySemanticContext> ParserATNSimulator::getPredsForAmbigAlts(const BitSet &ambigAlts,
-  ATNConfigSet *configs, size_t nalts) {
+  const ATNConfigSet &configs, size_t nalts) {
   // REACH=[1|1|[]|0:0, 1|2|[]|0:1]
   /* altToPred starts as an array of all null contexts. The entry at index i
    * corresponds to alternative i. altToPred[i] may have one of three values:
@@ -678,9 +560,9 @@ std::vector<AnySemanticContext> ParserATNSimulator::getPredsForAmbigAlts(const B
    */
   std::vector<AnySemanticContext> altToPred(nalts + 1);
 
-  for (const auto &c : configs->configs) {
-    if (ambigAlts.test(c->alt)) {
-      altToPred[c->alt] = SemanticContext::Or(altToPred[c->alt], c->semanticContext);
+  for (const auto &c : configs) {
+    if (ambigAlts.test(c.alt)) {
+      altToPred[c.alt] = SemanticContext::Or(altToPred[c.alt], c.semanticContext);
     }
   }
 
@@ -724,19 +606,17 @@ std::vector<dfa::DFAState::PredPrediction> ParserATNSimulator::getPredicatePredi
   return pairs;
 }
 
-size_t ParserATNSimulator::getSynValidOrSemInvalidAltThatFinishedDecisionEntryRule(ATNConfigSet *configs,
+size_t ParserATNSimulator::getSynValidOrSemInvalidAltThatFinishedDecisionEntryRule(const ATNConfigSet &configs,
   ParserRuleContext *outerContext)
 {
-  std::pair<ATNConfigSet *, ATNConfigSet *> sets = splitAccordingToSemanticValidity(configs, outerContext);
-  std::unique_ptr<ATNConfigSet> semValidConfigs(sets.first);
-  std::unique_ptr<ATNConfigSet> semInvalidConfigs(sets.second);
-  size_t alt = getAltThatFinishedDecisionEntryRule(semValidConfigs.get());
+  std::pair<ATNConfigSet, ATNConfigSet> sets = splitAccordingToSemanticValidity(configs, outerContext);
+  size_t alt = getAltThatFinishedDecisionEntryRule(sets.first);
   if (alt != ATN::INVALID_ALT_NUMBER) { // semantically/syntactically viable path exists
     return alt;
   }
   // Is there a syntactically valid path with a failed pred?
-  if (!semInvalidConfigs->configs.empty()) {
-    alt = getAltThatFinishedDecisionEntryRule(semInvalidConfigs.get());
+  if (!sets.second.isEmpty()) {
+    alt = getAltThatFinishedDecisionEntryRule(sets.second);
     if (alt != ATN::INVALID_ALT_NUMBER) { // syntactically viable path exists
       return alt;
     }
@@ -744,11 +624,11 @@ size_t ParserATNSimulator::getSynValidOrSemInvalidAltThatFinishedDecisionEntryRu
   return ATN::INVALID_ALT_NUMBER;
 }
 
-size_t ParserATNSimulator::getAltThatFinishedDecisionEntryRule(ATNConfigSet *configs) {
+size_t ParserATNSimulator::getAltThatFinishedDecisionEntryRule(const ATNConfigSet &configs) {
   misc::IntervalSet alts;
-  for (const auto &c : configs->configs) {
-    if (c->getOuterContextDepth() > 0 || (is<RuleStopState *>(c->state) && c->context->hasEmptyPath())) {
-      alts.add(c->alt);
+  for (const auto &c : configs) {
+    if (c.getOuterContextDepth() > 0 || (c.state->getStateType() == ATNState::RULE_STOP && c.context.hasEmptyPath())) {
+      alts.add(c.alt);
     }
   }
   if (alts.size() == 0) {
@@ -757,22 +637,22 @@ size_t ParserATNSimulator::getAltThatFinishedDecisionEntryRule(ATNConfigSet *con
   return alts.getMinElement();
 }
 
-std::pair<ATNConfigSet *, ATNConfigSet *> ParserATNSimulator::splitAccordingToSemanticValidity(ATNConfigSet *configs,
+std::pair<ATNConfigSet, ATNConfigSet> ParserATNSimulator::splitAccordingToSemanticValidity(const ATNConfigSet &configs,
   ParserRuleContext *outerContext) {
 
   // mem-check: both pointers must be freed by the caller.
-  ATNConfigSet *succeeded(new ATNConfigSet(configs->fullCtx));
-  ATNConfigSet *failed(new ATNConfigSet(configs->fullCtx));
-  for (const auto &c : configs->configs) {
-    if (c->semanticContext != SemanticContext::none()) {
-      bool predicateEvaluationResult = evalSemanticContext(c->semanticContext, outerContext, c->alt, configs->fullCtx);
+  ATNConfigSet succeeded(configs.fullCtx);
+  ATNConfigSet failed(configs.fullCtx);
+  for (const auto &c : configs) {
+    if (c.semanticContext != SemanticContext::none()) {
+      bool predicateEvaluationResult = evalSemanticContext(c.semanticContext, outerContext, c.alt, configs.fullCtx);
       if (predicateEvaluationResult) {
-        succeeded->add(c);
+        succeeded.add(c);
       } else {
-        failed->add(c);
+        failed.add(c);
       }
     } else {
-      succeeded->add(c);
+      succeeded.add(c);
     }
   }
   return { succeeded, failed };
@@ -816,7 +696,7 @@ bool ParserATNSimulator::evalSemanticContext(const AnySemanticContext &pred, Par
   return pred.eval(parser, parserCallStack);
 }
 
-void ParserATNSimulator::closure(Ref<ATNConfig> const& config, ATNConfigSet *configs, ATNConfig::Set &closureBusy,
+void ParserATNSimulator::closure(const ATNConfig &config, ATNConfigSet *configs, std::unordered_set<ATNConfig> &closureBusy,
                                  bool collectPredicates, bool fullCtx, bool treatEofAsEpsilon) {
   const int initialDepth = 0;
   closureCheckingStopState(config, configs, closureBusy, collectPredicates, fullCtx, initialDepth, treatEofAsEpsilon);
@@ -824,34 +704,34 @@ void ParserATNSimulator::closure(Ref<ATNConfig> const& config, ATNConfigSet *con
   assert(!fullCtx || !configs->dipsIntoOuterContext);
 }
 
-void ParserATNSimulator::closureCheckingStopState(Ref<ATNConfig> const& config, ATNConfigSet *configs,
-  ATNConfig::Set &closureBusy, bool collectPredicates, bool fullCtx, int depth, bool treatEofAsEpsilon) {
+void ParserATNSimulator::closureCheckingStopState(const ATNConfig &config, ATNConfigSet *configs,
+  std::unordered_set<ATNConfig> &closureBusy, bool collectPredicates, bool fullCtx, int depth, bool treatEofAsEpsilon) {
 
 #if DEBUG_ATN == 1
     std::cout << "closure(" << config->toString(true) << ")" << std::endl;
 #endif
 
-  if (is<RuleStopState *>(config->state)) {
+  if (config.state->getStateType() == ATNState::RULE_STOP) {
     // We hit rule end. If we have context info, use it
     // run thru all possible stack tops in ctx
-    if (!config->context->isEmpty()) {
-      for (size_t i = 0; i < config->context->size(); i++) {
-        if (config->context->getReturnState(i) == PredictionContext::EMPTY_RETURN_STATE) {
+    if (!config.context.isEmpty()) {
+      for (size_t i = 0; i < config.context.size(); i++) {
+        if (config.context.getReturnState(i) == PredictionContext::EMPTY_RETURN_STATE) {
           if (fullCtx) {
-            configs->add(std::make_shared<ATNConfig>(*config, config->state, PredictionContext::EMPTY), &mergeCache);
+            configs->add(ATNConfig(config, config.state, PredictionContext::empty()));
             continue;
           } else {
             // we have no context info, just chase follow links (if greedy)
 #if DEBUG_ATN == 1
-              std::cout << "FALLING off rule " << getRuleName(config->state->ruleIndex) << std::endl;
+              std::cout << "FALLING off rule " << getRuleName(config.state->ruleIndex) << std::endl;
 #endif
-            closure_(config, configs, closureBusy, collectPredicates, fullCtx, depth, treatEofAsEpsilon);
+            closure(config, configs, closureBusy, collectPredicates, fullCtx, depth, treatEofAsEpsilon);
           }
           continue;
         }
-        ATNState *returnState = atn.states[config->context->getReturnState(i)];
-        Ref<const PredictionContext> newContext = config->context->getParent(i); // "pop" return state
-        Ref<ATNConfig> c = std::make_shared<ATNConfig>(returnState, config->alt, newContext, config->semanticContext);
+        ATNState *returnState = atn.states[config.context.getReturnState(i)].get();
+        AnyPredictionContext newContext = config.context.getParent(i); // "pop" return state
+        ATNConfig c = ATNConfig(returnState, config.alt, std::move(newContext), config.semanticContext);
         // While we have context to pop back from, we may have
         // gotten that context AFTER having falling off a rule.
         // Make sure we track that we are now out of context.
@@ -859,7 +739,7 @@ void ParserATNSimulator::closureCheckingStopState(Ref<ATNConfig> const& config, 
         // This assignment also propagates the
         // isPrecedenceFilterSuppressed() value to the new
         // configuration.
-        c->reachesIntoOuterContext = config->reachesIntoOuterContext;
+        c.reachesIntoOuterContext = config.reachesIntoOuterContext;
         assert(depth > INT_MIN);
 
         closureCheckingStopState(c, configs, closureBusy, collectPredicates, fullCtx, depth - 1, treatEofAsEpsilon);
@@ -867,36 +747,36 @@ void ParserATNSimulator::closureCheckingStopState(Ref<ATNConfig> const& config, 
       return;
     } else if (fullCtx) {
       // reached end of start rule
-      configs->add(config, &mergeCache);
+      configs->add(config);
       return;
     } else {
       // else if we have no context info, just chase follow links (if greedy)
     }
   }
 
-  closure_(config, configs, closureBusy, collectPredicates, fullCtx, depth, treatEofAsEpsilon);
+  closure(config, configs, closureBusy, collectPredicates, fullCtx, depth, treatEofAsEpsilon);
 }
 
-void ParserATNSimulator::closure_(Ref<ATNConfig> const& config, ATNConfigSet *configs, ATNConfig::Set &closureBusy,
-                                  bool collectPredicates, bool fullCtx, int depth, bool treatEofAsEpsilon) {
-  ATNState *p = config->state;
+void ParserATNSimulator::closure(const ATNConfig &config, ATNConfigSet *configs, std::unordered_set<ATNConfig> &closureBusy,
+                                bool collectPredicates, bool fullCtx, int depth, bool treatEofAsEpsilon) {
+  ATNState *p = config.state;
   // optimization
   if (!p->epsilonOnlyTransitions) {
     // make sure to not return here, because EOF transitions can act as
     // both epsilon transitions and non-epsilon transitions.
-    configs->add(config, &mergeCache);
+    configs->add(config);
   }
 
   for (size_t i = 0; i < p->transitions.size(); i++) {
-    if (i == 0 && canDropLoopEntryEdgeInLeftRecursiveRule(config.get()))
+    if (i == 0 && canDropLoopEntryEdgeInLeftRecursiveRule(config))
       continue;
 
     const AnyTransition &t = p->transitions[i];
     bool continueCollecting = !t.is<ActionTransition>() && collectPredicates;
-    Ref<ATNConfig> c = getEpsilonTarget(config, t, continueCollecting, depth == 0, fullCtx, treatEofAsEpsilon);
-    if (c != nullptr) {
+    std::optional<ATNConfig> c = getEpsilonTarget(config, t, continueCollecting, depth == 0, fullCtx, treatEofAsEpsilon);
+    if (c.has_value()) {
       int newDepth = depth;
-      if (is<RuleStopState*>(config->state)) {
+      if (config.state->getStateType() == ATNState::RULE_STOP) {
         assert(!fullCtx);
 
         // target fell off end of rule; mark resulting c as having dipped into outer context
@@ -905,28 +785,24 @@ void ParserATNSimulator::closure_(Ref<ATNConfig> const& config, ATNConfigSet *co
         // come in handy and we avoid evaluating context dependent
         // preds if this is > 0.
 
-        if (closureBusy.count(c) > 0) {
+        if (closureBusy.count(c.value()) > 0) {
           // avoid infinite recursion for right-recursive rules
           continue;
         }
-        closureBusy.insert(c);
 
         if (_dfa != nullptr && _dfa->isPrecedenceDfa()) {
           size_t outermostPrecedenceReturn = t.as<EpsilonTransition>().getOutermostPrecedenceReturn();
           if (outermostPrecedenceReturn == _dfa->atnStartState->ruleIndex) {
-            c->setPrecedenceFilterSuppressed(true);
+            c.value().setPrecedenceFilterSuppressed(true);
           }
         }
 
-        c->reachesIntoOuterContext++;
+        c.value().reachesIntoOuterContext++;
 
-        if (!t.isEpsilon()) {
-          // avoid infinite recursion for EOF* and EOF+
-          if (closureBusy.count(c) == 0) {
-            closureBusy.insert(c);
-          } else {
-            continue;
-          }
+        // avoid infinite recursion for EOF* and EOF+
+        auto [_, inserted] = closureBusy.insert(c.value());
+        if (!inserted) {
+          continue;
         }
 
         configs->dipsIntoOuterContext = true; // TODO: can remove? only care when we add to set per middle of this method
@@ -939,9 +815,8 @@ void ParserATNSimulator::closure_(Ref<ATNConfig> const& config, ATNConfigSet *co
 
       } else  if (!t.isEpsilon()) {
         // avoid infinite recursion for EOF* and EOF+
-        if (closureBusy.count(c) == 0) {
-          closureBusy.insert(c);
-        } else {
+        auto [_, inserted] = closureBusy.insert(c.value());
+        if (!inserted) {
           continue;
         }
       }
@@ -953,16 +828,16 @@ void ParserATNSimulator::closure_(Ref<ATNConfig> const& config, ATNConfigSet *co
         }
       }
 
-      closureCheckingStopState(c, configs, closureBusy, continueCollecting, fullCtx, newDepth, treatEofAsEpsilon);
+      closureCheckingStopState(c.value(), configs, closureBusy, continueCollecting, fullCtx, newDepth, treatEofAsEpsilon);
     }
   }
 }
 
-bool ParserATNSimulator::canDropLoopEntryEdgeInLeftRecursiveRule(ATNConfig *config) const {
+bool ParserATNSimulator::canDropLoopEntryEdgeInLeftRecursiveRule(const ATNConfig &config) const {
   if (TURN_OFF_LR_LOOP_ENTRY_BRANCH_OPT)
     return false;
 
-  ATNState *p = config->state;
+  ATNState *p = config.state;
 
   // First check to see if we are in StarLoopEntryState generated during
   // left-recursion elimination. For efficiency, also check if
@@ -970,30 +845,30 @@ bool ParserATNSimulator::canDropLoopEntryEdgeInLeftRecursiveRule(ATNConfig *conf
   // global FOLLOW so we can't perform optimization
   if (p->getStateType() != ATNState::STAR_LOOP_ENTRY ||
       !((StarLoopEntryState *)p)->isPrecedenceDecision || // Are we the special loop entry/exit state?
-      config->context->isEmpty() ||                      // If SLL wildcard
-      config->context->hasEmptyPath())
+      config.context.isEmpty() ||                      // If SLL wildcard
+      config.context.hasEmptyPath())
   {
     return false;
   }
 
   // Require all return states to return back to the same rule
   // that p is in.
-  size_t numCtxs = config->context->size();
+  size_t numCtxs = config.context.size();
   for (size_t i = 0; i < numCtxs; i++) { // for each stack context
-    ATNState *returnState = atn.states[config->context->getReturnState(i)];
+    ATNState *returnState = atn.states[config.context.getReturnState(i)].get();
     if (returnState->ruleIndex != p->ruleIndex)
       return false;
   }
 
   BlockStartState *decisionStartState = (BlockStartState *)p->transitions[0].getTarget();
   size_t blockEndStateNum = decisionStartState->endState->stateNumber;
-  BlockEndState *blockEndState = (BlockEndState *)atn.states[blockEndStateNum];
+  BlockEndState *blockEndState = (BlockEndState *)atn.states[blockEndStateNum].get();
 
   // Verify that the top of each stack context leads to loop entry/exit
   // state through epsilon edges and w/o leaving rule.
   for (size_t i = 0; i < numCtxs; i++) {                           // for each stack context
-    size_t returnStateNumber = config->context->getReturnState(i);
-    ATNState *returnState = atn.states[returnStateNumber];
+    size_t returnStateNumber = config.context.getReturnState(i);
+    ATNState *returnState = atn.states[returnStateNumber].get();
     // All states must have single outgoing epsilon edge.
     if (returnState->transitions.size() != 1 || !returnState->transitions[0].isEpsilon())
     {
@@ -1043,7 +918,7 @@ std::string ParserATNSimulator::getRuleName(size_t index) {
   return "<rule " + std::to_string(index) + ">";
 }
 
-Ref<ATNConfig> ParserATNSimulator::getEpsilonTarget(Ref<ATNConfig> const& config, const Transition &t, bool collectPredicates,
+std::optional<ATNConfig> ParserATNSimulator::getEpsilonTarget(const ATNConfig &config, const Transition &t, bool collectPredicates,
                                                     bool inContext, bool fullCtx, bool treatEofAsEpsilon) {
   switch (t.getType()) {
     case TransitionType::RULE:
@@ -1059,7 +934,7 @@ Ref<ATNConfig> ParserATNSimulator::getEpsilonTarget(Ref<ATNConfig> const& config
       return actionTransition(config, downCast<const ActionTransition&>(t));
 
     case TransitionType::EPSILON:
-      return std::make_shared<ATNConfig>(*config, t.getTarget());
+      return ATNConfig(config, t.getTarget());
 
     case TransitionType::ATOM:
     case TransitionType::RANGE:
@@ -1068,26 +943,26 @@ Ref<ATNConfig> ParserATNSimulator::getEpsilonTarget(Ref<ATNConfig> const& config
       // transition is traversed
       if (treatEofAsEpsilon) {
         if (t.matches(Token::EOF, 0, 1)) {
-          return std::make_shared<ATNConfig>(*config, t.getTarget());
+          return ATNConfig(config, t.getTarget());
         }
       }
 
-      return nullptr;
+      return std::nullopt;
 
     default:
-      return nullptr;
+      return std::nullopt;
   }
 }
 
-Ref<ATNConfig> ParserATNSimulator::actionTransition(Ref<ATNConfig> const& config, const ActionTransition &t) {
+ATNConfig ParserATNSimulator::actionTransition(const ATNConfig &config, const ActionTransition &t) {
 #if DEBUG_DFA == 1
     std::cout << "ACTION edge " << t.getRuleIndex() << ":" << t.getActionIndex() << std::endl;
 #endif
 
-  return std::make_shared<ATNConfig>(*config, t.getTarget());
+  return ATNConfig(config, t.getTarget());
 }
 
-Ref<ATNConfig> ParserATNSimulator::precedenceTransition(Ref<ATNConfig> const& config, const PrecedencePredicateTransition &pt,
+ATNConfig ParserATNSimulator::precedenceTransition(const ATNConfig &config, const PrecedencePredicateTransition &pt,
     bool collectPredicates, bool inContext, bool fullCtx) {
 #if DEBUG_DFA == 1
     std::cout << "PRED (collectPredicates=" << collectPredicates << ") " << pt.getPrecedence() << ">=_p" << ", ctx dependent=true" << std::endl;
@@ -1096,7 +971,7 @@ Ref<ATNConfig> ParserATNSimulator::precedenceTransition(Ref<ATNConfig> const& co
     }
 #endif
 
-  Ref<ATNConfig> c;
+  ATNConfig c;
   if (collectPredicates && inContext) {
     SemanticContext::PrecedencePredicate predicate = pt.getPredicate();
 
@@ -1107,17 +982,17 @@ Ref<ATNConfig> ParserATNSimulator::precedenceTransition(Ref<ATNConfig> const& co
       // later during conflict resolution.
       size_t currentPosition = _input->index();
       _input->seek(_startIndex);
-      bool predSucceeds = evalSemanticContext(predicate, _outerContext, config->alt, fullCtx);
+      bool predSucceeds = evalSemanticContext(predicate, _outerContext, config.alt, fullCtx);
       _input->seek(currentPosition);
       if (predSucceeds) {
-        c = std::make_shared<ATNConfig>(*config, pt.getTarget()); // no pred context
+        c = ATNConfig(config, pt.getTarget()); // no pred context
       }
     } else {
-      AnySemanticContext newSemCtx = SemanticContext::And(config->semanticContext, predicate);
-      c = std::make_shared<ATNConfig>(*config, pt.getTarget(), std::move(newSemCtx));
+      AnySemanticContext newSemCtx = SemanticContext::And(config.semanticContext, predicate);
+      c = ATNConfig(config, pt.getTarget(), std::move(newSemCtx));
     }
   } else {
-    c = std::make_shared<ATNConfig>(*config, pt.getTarget());
+    c = ATNConfig(config, pt.getTarget());
   }
 
 #if DEBUG_DFA == 1
@@ -1127,7 +1002,7 @@ Ref<ATNConfig> ParserATNSimulator::precedenceTransition(Ref<ATNConfig> const& co
   return c;
 }
 
-Ref<ATNConfig> ParserATNSimulator::predTransition(Ref<ATNConfig> const& config, const PredicateTransition &pt,
+ATNConfig ParserATNSimulator::predTransition(const ATNConfig &config, const PredicateTransition &pt,
   bool collectPredicates, bool inContext, bool fullCtx) {
 #if DEBUG_DFA == 1
     std::cout << "PRED (collectPredicates=" << collectPredicates << ") " << pt.getRuleIndex() << ":" << pt.getPredIndex() << ", ctx dependent=" << pt.isCtxDependent() << std::endl;
@@ -1136,7 +1011,7 @@ Ref<ATNConfig> ParserATNSimulator::predTransition(Ref<ATNConfig> const& config, 
     }
 #endif
 
-  Ref<ATNConfig> c = nullptr;
+  ATNConfig c;
   if (collectPredicates && (!pt.isCtxDependent() || (pt.isCtxDependent() && inContext))) {
     SemanticContext::Predicate predicate = pt.getPredicate();
     if (fullCtx) {
@@ -1146,17 +1021,17 @@ Ref<ATNConfig> ParserATNSimulator::predTransition(Ref<ATNConfig> const& config, 
       // later during conflict resolution.
       size_t currentPosition = _input->index();
       _input->seek(_startIndex);
-      bool predSucceeds = evalSemanticContext(predicate, _outerContext, config->alt, fullCtx);
+      bool predSucceeds = evalSemanticContext(predicate, _outerContext, config.alt, fullCtx);
       _input->seek(currentPosition);
       if (predSucceeds) {
-        c = std::make_shared<ATNConfig>(*config, pt.getTarget()); // no pred context
+        c = ATNConfig(config, pt.getTarget()); // no pred context
       }
     } else {
-      AnySemanticContext newSemCtx = SemanticContext::And(config->semanticContext, predicate);
-      c = std::make_shared<ATNConfig>(*config, pt.getTarget(), std::move(newSemCtx));
+      AnySemanticContext newSemCtx = SemanticContext::And(config.semanticContext, predicate);
+      c = ATNConfig(config, pt.getTarget(), std::move(newSemCtx));
     }
   } else {
-    c = std::make_shared<ATNConfig>(*config, pt.getTarget());
+    c = ATNConfig(config, pt.getTarget());
   }
 
 #if DEBUG_DFA == 1
@@ -1166,27 +1041,27 @@ Ref<ATNConfig> ParserATNSimulator::predTransition(Ref<ATNConfig> const& config, 
   return c;
 }
 
-Ref<ATNConfig> ParserATNSimulator::ruleTransition(Ref<ATNConfig> const& config, const RuleTransition &t) {
+ATNConfig ParserATNSimulator::ruleTransition(const ATNConfig &config, const RuleTransition &t) {
 #if DEBUG_DFA == 1
     std::cout << "CALL rule " << getRuleName(t.getTarget()->ruleIndex) << ", ctx=" << config->context << std::endl;
 #endif
 
   atn::ATNState *returnState = t.getFollowState();
-  Ref<const PredictionContext> newContext = SingletonPredictionContext::create(config->context, returnState->stateNumber);
-  return std::make_shared<ATNConfig>(*config, t.getTarget(), newContext);
+  AnyPredictionContext newContext = SingletonPredictionContext::create(config.context, returnState->stateNumber);
+  return ATNConfig(config, t.getTarget(), std::move(newContext));
 }
 
-BitSet ParserATNSimulator::getConflictingAlts(ATNConfigSet *configs) {
+BitSet ParserATNSimulator::getConflictingAlts(const ATNConfigSet &configs) {
   std::vector<BitSet> altsets = PredictionModeClass::getConflictingAltSubsets(configs);
   return PredictionModeClass::getAlts(altsets);
 }
 
-BitSet ParserATNSimulator::getConflictingAltsOrUniqueAlt(ATNConfigSet *configs) {
+BitSet ParserATNSimulator::getConflictingAltsOrUniqueAlt(const ATNConfigSet &configs) const {
   BitSet conflictingAlts;
-  if (configs->uniqueAlt != ATN::INVALID_ALT_NUMBER) {
-    conflictingAlts.set(configs->uniqueAlt);
+  if (configs.uniqueAlt != ATN::INVALID_ALT_NUMBER) {
+    conflictingAlts.set(configs.uniqueAlt);
   } else {
-    conflictingAlts = configs->conflictingAlts;
+    conflictingAlts = configs.conflictingAlts;
   }
   return conflictingAlts;
 }
@@ -1211,10 +1086,10 @@ std::string ParserATNSimulator::getLookaheadName(TokenStream *input) {
 
 void ParserATNSimulator::dumpDeadEndConfigs(NoViableAltException &nvae) {
   std::cerr << "dead end configs: ";
-  for (const auto &c : nvae.getDeadEndConfigs()->configs) {
+  for (const auto &c : *nvae.getDeadEndConfigs()) {
     std::string trans = "no edges";
-    if (c->state->transitions.size() > 0) {
-      const AnyTransition &t = c->state->transitions[0];
+    if (c.state->transitions.size() > 0) {
+      const AnyTransition &t = c.state->transitions[0];
       if (t.is<AtomTransition>()) {
         trans = "Atom " + getTokenName(static_cast<size_t>(t.label().getSingleElement()));
       } else if (t.is<SetTransition>()) {
@@ -1225,28 +1100,28 @@ void ParserATNSimulator::dumpDeadEndConfigs(NoViableAltException &nvae) {
         trans += t.label().toString();
       }
     }
-    std::cerr << c->toString(true) + ":" + trans;
+    std::cerr << c.toString(true) + ":" + trans;
   }
 }
 
 NoViableAltException ParserATNSimulator::noViableAlt(TokenStream *input, ParserRuleContext *outerContext,
-  ATNConfigSet *configs, size_t startIndex, bool deleteConfigs) {
-  return NoViableAltException(parser, input, input->get(startIndex), input->LT(1), configs, outerContext, deleteConfigs);
+  const ATNConfigSet &configs, size_t startIndex) {
+  return NoViableAltException(parser, input, input->get(startIndex), input->LT(1), configs, outerContext);
 }
 
-size_t ParserATNSimulator::getUniqueAlt(ATNConfigSet *configs) {
+size_t ParserATNSimulator::getUniqueAlt(const ATNConfigSet &configs) {
   size_t alt = ATN::INVALID_ALT_NUMBER;
-  for (const auto &c : configs->configs) {
+  for (const auto &c : configs) {
     if (alt == ATN::INVALID_ALT_NUMBER) {
-      alt = c->alt; // found first alt
-    } else if (c->alt != alt) {
+      alt = c.alt; // found first alt
+    } else if (c.alt != alt) {
       return ATN::INVALID_ALT_NUMBER;
     }
   }
   return alt;
 }
 
-dfa::DFAState *ParserATNSimulator::addDFAEdge(dfa::DFA &dfa, dfa::DFAState *from, ssize_t t, dfa::DFAState *to) {
+dfa::DFAState *ParserATNSimulator::addDFAEdge(dfa::DFA &dfa, dfa::DFAState *from, ssize_t t, std::unique_ptr<dfa::DFAState> to) {
 #if DEBUG_DFA == 1
     std::cout << "EDGE " << from << " -> " << to << " upon " << getTokenName(t) << std::endl;
 #endif
@@ -1255,18 +1130,12 @@ dfa::DFAState *ParserATNSimulator::addDFAEdge(dfa::DFA &dfa, dfa::DFAState *from
     return nullptr;
   }
 
-  _stateLock.lock();
-  to = addDFAState(dfa, to); // used existing if possible not incoming
-  _stateLock.unlock();
+  auto *s0 = atn.addParserDFAState(dfa, std::move(to));
   if (from == nullptr || t > (int)atn.maxTokenType) {
-    return to;
+    return s0;
   }
 
-  {
-    _edgeLock.lock();
-    from->edges[t] = to; // connect
-    _edgeLock.unlock();
-  }
+  atn.addParserDFAEdge(from, t, s0);
 
 #if DEBUG_DFA == 1
     std::string dfaText;
@@ -1278,38 +1147,11 @@ dfa::DFAState *ParserATNSimulator::addDFAEdge(dfa::DFA &dfa, dfa::DFAState *from
     std::cout << "DFA=\n" << dfaText << std::endl;
 #endif
 
-  return to;
-}
-
-dfa::DFAState *ParserATNSimulator::addDFAState(dfa::DFA &dfa, dfa::DFAState *D) {
-  if (D == ERROR.get()) {
-    return D;
-  }
-
-  // Optimizing the configs below should not alter the hash code. Thus we can just do an insert
-  // which will only succeed if an equivalent DFAState does not already exist.
-  auto [existing, inserted] = dfa.states.insert(D);
-  if (!inserted) {
-    return *existing;
-  }
-
-  // Previously we did a lookup, then set fields, then inserted. It was `dfa.states.size()`, since
-  // we already inserted we need to subtract one.
-  D->stateNumber = static_cast<int>(dfa.states.size() - 1);
-  if (!D->configs->isReadonly()) {
-    D->configs->optimizeConfigs(this);
-    D->configs->setReadonly(true);
-  }
-
-#if DEBUG_DFA == 1
-  std::cout << "adding new DFA state: " << D << std::endl;
-#endif
-
-  return D;
+  return s0;
 }
 
 void ParserATNSimulator::reportAttemptingFullContext(dfa::DFA &dfa, const antlrcpp::BitSet &conflictingAlts,
-  ATNConfigSet *configs, size_t startIndex, size_t stopIndex) {
+  const ATNConfigSet &configs, size_t startIndex, size_t stopIndex) {
 #if DEBUG_DFA == 1 || RETRY_DEBUG == 1
     misc::Interval interval = misc::Interval((int)startIndex, (int)stopIndex);
     std::cout << "reportAttemptingFullContext decision=" << dfa.decision << ":" << configs << ", input=" << parser->getTokenStream()->getText(interval) << std::endl;
@@ -1320,7 +1162,7 @@ void ParserATNSimulator::reportAttemptingFullContext(dfa::DFA &dfa, const antlrc
   }
 }
 
-void ParserATNSimulator::reportContextSensitivity(dfa::DFA &dfa, size_t prediction, ATNConfigSet *configs,
+void ParserATNSimulator::reportContextSensitivity(dfa::DFA &dfa, size_t prediction, const ATNConfigSet &configs,
   size_t startIndex, size_t stopIndex) {
 #if DEBUG_DFA == 1 || RETRY_DEBUG == 1
     misc::Interval interval = misc::Interval(startIndex, stopIndex);
@@ -1333,7 +1175,7 @@ void ParserATNSimulator::reportContextSensitivity(dfa::DFA &dfa, size_t predicti
 }
 
 void ParserATNSimulator::reportAmbiguity(dfa::DFA &dfa, dfa::DFAState * /*D*/, size_t startIndex, size_t stopIndex,
-                                         bool exact, const antlrcpp::BitSet &ambigAlts, ATNConfigSet *configs) {
+                                         bool exact, const antlrcpp::BitSet &ambigAlts, const ATNConfigSet &configs) {
 #if DEBUG_DFA == 1 || RETRY_DEBUG == 1
     misc::Interval interval = misc::Interval((int)startIndex, (int)stopIndex);
     std::cout << "reportAmbiguity " << ambigAlts << ":" << configs << ", input=" << parser->getTokenStream()->getText(interval) << std::endl;
@@ -1366,13 +1208,4 @@ bool ParserATNSimulator::getLrLoopSetting() {
     return false;
   std::string value(var);
   return value == "true" || value == "1";
-}
-
-#ifdef _MSC_VER
-#pragma warning (default:4996)
-#endif
-
-void ParserATNSimulator::InitializeInstanceFields() {
-  _mode = PredictionMode::LL;
-  _startIndex = 0;
 }

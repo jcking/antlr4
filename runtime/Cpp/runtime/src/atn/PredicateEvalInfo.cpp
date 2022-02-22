@@ -12,6 +12,6 @@ using namespace antlr4::atn;
 
 PredicateEvalInfo::PredicateEvalInfo(size_t decision, TokenStream *input, size_t startIndex, size_t stopIndex,
   AnySemanticContext semctx, bool evalResult, size_t predictedAlt, bool fullCtx)
-  : DecisionEventInfo(decision, nullptr, input, startIndex, stopIndex, fullCtx),
+  : DecisionEventInfo(decision, ATNConfigSet(), input, startIndex, stopIndex, fullCtx),
     semctx(std::move(semctx)), predictedAlt(predictedAlt), evalResult(evalResult) {
 }

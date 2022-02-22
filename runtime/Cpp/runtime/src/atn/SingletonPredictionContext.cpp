@@ -3,76 +3,50 @@
  * can be found in the LICENSE.txt file in the project root.
  */
 
-#include "atn/EmptyPredictionContext.h"
-
 #include "atn/SingletonPredictionContext.h"
+#include "atn/AnyPredictionContext.h"
 
 using namespace antlr4::atn;
 
-SingletonPredictionContext::SingletonPredictionContext(Ref<const PredictionContext> parent, size_t returnState)
-  : PredictionContext(parent ? calculateHashCode(parent, returnState) : calculateEmptyHashCode()),
-    parent(std::move(parent)), returnState(returnState) {
+namespace {
+
+const AnyPredictionContext invalidAnyPredictionContext;
+
+}
+
+SingletonPredictionContext::SingletonPredictionContext(AnyPredictionContext parent, size_t returnState)
+  : _parent(parent ? std::make_shared<AnyPredictionContext>(std::move(parent)) : nullptr), _returnState(returnState) {
   assert(returnState != ATNState::INVALID_STATE_NUMBER);
 }
 
-Ref<const SingletonPredictionContext> SingletonPredictionContext::create(Ref<const PredictionContext> parent, size_t returnState) {
-
+AnyPredictionContext SingletonPredictionContext::create(AnyPredictionContext parent, size_t returnState) {
   if (returnState == EMPTY_RETURN_STATE && parent) {
     // someone can pass in the bits of an array ctx that mean $
-    return std::dynamic_pointer_cast<const SingletonPredictionContext>(EMPTY);
+    return empty();
   }
-  return std::make_shared<SingletonPredictionContext>(std::move(parent), returnState);
+  return SingletonPredictionContext(std::move(parent), returnState);
 }
 
 size_t SingletonPredictionContext::size() const {
   return 1;
 }
 
-Ref<const PredictionContext> SingletonPredictionContext::getParent(size_t index) const {
+PredictionContextType SingletonPredictionContext::getType() const {
+  return PredictionContextType::SINGLETON;
+}
+
+const AnyPredictionContext& SingletonPredictionContext::getParent(size_t index) const {
+  static_cast<void>(index);
   assert(index == 0);
-  ((void)(index)); // Make Release build happy.
-  return parent;
+  return _parent ? *_parent : invalidAnyPredictionContext;
 }
 
 size_t SingletonPredictionContext::getReturnState(size_t index) const {
+  static_cast<void>(index);
   assert(index == 0);
-  ((void)(index)); // Make Release build happy.
-  return returnState;
+  return _returnState;
 }
 
-bool SingletonPredictionContext::operator == (const PredictionContext &o) const {
-  if (this == &o) {
-    return true;
-  }
-
-  const SingletonPredictionContext *other = dynamic_cast<const SingletonPredictionContext*>(&o);
-  if (other == nullptr) {
-    return false;
-  }
-
-  if (this->hashCode() != other->hashCode()) {
-    return false; // can't be same if hash is different
-  }
-
-  if (returnState != other->returnState)
-    return false;
-
-  if (!parent && !other->parent)
-    return true;
-  if (!parent || !other->parent)
-    return false;
-
-   return *parent == *other->parent;
-}
-
-std::string SingletonPredictionContext::toString() const {
-  //std::string up = !parent.expired() ? parent.lock()->toString() : "";
-  std::string up = parent != nullptr ? parent->toString() : "";
-  if (up.length() == 0) {
-    if (returnState == EMPTY_RETURN_STATE) {
-      return "$";
-    }
-    return std::to_string(returnState);
-  }
-  return std::to_string(returnState) + " " + up;
+bool SingletonPredictionContext::isEmpty() const {
+  return false;
 }

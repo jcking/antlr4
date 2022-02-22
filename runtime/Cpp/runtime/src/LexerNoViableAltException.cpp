@@ -13,16 +13,16 @@
 using namespace antlr4;
 
 LexerNoViableAltException::LexerNoViableAltException(Lexer *lexer, CharStream *input, size_t startIndex,
-                                                     atn::ATNConfigSet *deadEndConfigs)
-  : RecognitionException(lexer, input, nullptr, nullptr), _startIndex(startIndex), _deadEndConfigs(deadEndConfigs) {
+                                                     atn::ATNConfigSet deadEndConfigs)
+  : RecognitionException(lexer, input, nullptr, nullptr), _startIndex(startIndex), _deadEndConfigs(std::move(deadEndConfigs)) {
 }
 
 size_t LexerNoViableAltException::getStartIndex() {
   return _startIndex;
 }
 
-atn::ATNConfigSet* LexerNoViableAltException::getDeadEndConfigs() {
-  return _deadEndConfigs;
+const atn::ATNConfigSet* LexerNoViableAltException::getDeadEndConfigs() {
+  return &_deadEndConfigs;
 }
 
 std::string LexerNoViableAltException::toString() {

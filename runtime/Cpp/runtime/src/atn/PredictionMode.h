@@ -173,7 +173,7 @@ namespace atn {
      * the configurations to strip out all of the predicates so that a standard
      * {@link ATNConfigSet} will merge everything ignoring predicates.</p>
      */
-    static bool hasSLLConflictTerminatingPrediction(PredictionMode mode, ATNConfigSet *configs);
+    static bool hasSLLConflictTerminatingPrediction(PredictionMode mode, const ATNConfigSet &configs);
 
     /// <summary>
     /// Checks if any configuration in {@code configs} is in a
@@ -185,7 +185,7 @@ namespace atn {
     /// <param name="configs"> the configuration set to test </param>
     /// <returns> {@code true} if any configuration in {@code configs} is in a
     /// <seealso cref="RuleStopState"/>, otherwise {@code false} </returns>
-    static bool hasConfigInRuleStopState(ATNConfigSet *configs);
+    static bool hasConfigInRuleStopState(const ATNConfigSet &configs);
 
     /// <summary>
     /// Checks if all configurations in {@code configs} are in a
@@ -197,7 +197,7 @@ namespace atn {
     /// <param name="configs"> the configuration set to test </param>
     /// <returns> {@code true} if all configurations in {@code configs} are in a
     /// <seealso cref="RuleStopState"/>, otherwise {@code false} </returns>
-    static bool allConfigsInRuleStopStates(ATNConfigSet *configs);
+    static bool allConfigsInRuleStopStates(const ATNConfigSet &configs);
 
     /**
      * Full LL prediction termination.
@@ -402,7 +402,7 @@ namespace atn {
     static antlrcpp::BitSet getAlts(const std::vector<antlrcpp::BitSet> &altsets);
 
     /** Get union of all alts from configs. @since 4.5.1 */
-    static antlrcpp::BitSet getAlts(ATNConfigSet *configs);
+    static antlrcpp::BitSet getAlts(const ATNConfigSet &configs);
 
     /// <summary>
     /// This function gets the conflicting alt subsets from a configuration set.
@@ -414,7 +414,7 @@ namespace atn {
     /// alt and not pred
     /// </pre>
     /// </summary>
-    static std::vector<antlrcpp::BitSet> getConflictingAltSubsets(ATNConfigSet *configs);
+    static std::vector<antlrcpp::BitSet> getConflictingAltSubsets(const ATNConfigSet &configs);
 
     /// <summary>
     /// Get a map from state to alt subset from a configuration set. For each
@@ -425,9 +425,9 @@ namespace atn {
     /// cref="ATNConfig#alt alt"/>
     /// </pre>
     /// </summary>
-    static std::map<ATNState*, antlrcpp::BitSet> getStateToAltMap(ATNConfigSet *configs);
+    static std::unordered_map<const ATNState*, antlrcpp::BitSet> getStateToAltMap(const ATNConfigSet &configs);
 
-    static bool hasStateAssociatedWithOneAlt(ATNConfigSet *configs);
+    static bool hasStateAssociatedWithOneAlt(const ATNConfigSet &configs);
 
     static size_t getSingleViableAlt(const std::vector<antlrcpp::BitSet> &altsets);
   };

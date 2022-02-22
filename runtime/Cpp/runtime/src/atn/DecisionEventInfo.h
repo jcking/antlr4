@@ -7,6 +7,8 @@
 
 #include "antlr4-common.h"
 
+#include "atn/ATNConfigSet.h"
+
 namespace antlr4 {
 namespace atn {
 
@@ -38,7 +40,7 @@ namespace atn {
     /// prediction state when the current event occurred, or {@code null} if no
     /// additional information is relevant or available.
     /// </summary>
-    const ATNConfigSet *configs;
+    const ATNConfigSet configs;
 
     /// <summary>
     /// The input token stream which is being parsed.
@@ -62,7 +64,7 @@ namespace atn {
     /// </summary>
     const bool fullCtx;
 
-    DecisionEventInfo(size_t decision, ATNConfigSet *configs, TokenStream *input, size_t startIndex,
+    DecisionEventInfo(size_t decision, ATNConfigSet configs, TokenStream *input, size_t startIndex,
                       size_t stopIndex, bool fullCtx);
   };
 

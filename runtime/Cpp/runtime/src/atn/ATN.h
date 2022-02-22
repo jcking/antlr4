@@ -7,6 +7,8 @@
 
 #include "RuleContext.h"
 #include "atn/AnyLexerAction.h"
+#include "atn/ATNState.h"
+#include "atn/ATNConfigSet.h"
 
 // GCC generates a warning when forward-declaring ATN if ATN has already been
 // declared due to the attributes added by ANTLR4CPP_PUBLIC.
@@ -15,30 +17,49 @@
 #define ANTLR4CPP_ATN_DECLARED
 
 namespace antlr4 {
+
+  class Parser;
+  class RuleContext;
+
+namespace dfa {
+  class DFA;
+  class DFAState;
+}
+
 namespace atn {
 
-  class ANTLR4CPP_PUBLIC ATN {
+  class ATNConfigSet;
+  class ParserATNSimulator;
+
+  class ANTLR4CPP_PUBLIC ATN final {
   public:
     static constexpr size_t INVALID_ALT_NUMBER = 0;
 
     /// Used for runtime deserialization of ATNs from strings.
     ATN();
-    ATN(ATN &&other);
-    ATN(ATNType grammarType, size_t maxTokenType);
-    virtual ~ATN();
 
-    std::vector<ATNState *> states;
+    ATN(ATNType grammarType, size_t maxTokenType);
+
+    ATN(const ATN&) = delete;
+
+    ATN(ATN&&) = delete;
+
+    ATN& operator=(const ATN&) = delete;
+
+    ATN& operator=(ATN&&) = delete;
+
+    std::vector<std::unique_ptr<ATNState>> states;
 
     /// Each subrule/rule is a decision point and we must track them so we
     /// can go back later and build DFA predictors for them.  This includes
     /// all the rules, subrules, optional blocks, ()+, ()* etc...
-    std::vector<DecisionState *> decisionToState;
+    std::vector<DecisionState*> decisionToState;
 
     /// Maps from rule index to starting state number.
-    std::vector<RuleStartState *> ruleToStartState;
+    std::vector<RuleStartState*> ruleToStartState;
 
     /// Maps from rule index to stop state number.
-    std::vector<RuleStopState *> ruleToStopState;
+    std::vector<RuleStopState*> ruleToStopState;
 
     /// The type of the ATN.
     ATNType grammarType;
@@ -59,9 +80,7 @@ namespace atn {
     /// be referenced by action transitions in the ATN.
     std::vector<AnyLexerAction> lexerActions;
 
-    std::vector<TokensStartState *> modeToStartState;
-
-    ATN& operator=(ATN &&other) noexcept;
+    std::vector<TokensStartState*> modeToStartState;
 
     /// <summary>
     /// Compute the set of valid tokens that can occur starting in state {@code s}.
@@ -69,24 +88,24 @@ namespace atn {
     ///  the rule surrounding {@code s}. In other words, the set will be
     ///  restricted to tokens reachable staying within {@code s}'s rule.
     /// </summary>
-    virtual misc::IntervalSet nextTokens(ATNState *s, RuleContext *ctx) const;
+    misc::IntervalSet nextTokens(ATNState *s, RuleContext *ctx) const;
 
     /// <summary>
     /// Compute the set of valid tokens that can occur starting in {@code s} and
     /// staying in same rule. <seealso cref="Token#EPSILON"/> is in set if we reach end of
     /// rule.
     /// </summary>
-    virtual misc::IntervalSet const& nextTokens(ATNState *s) const;
+    misc::IntervalSet const& nextTokens(ATNState *s) const;
 
-    virtual void addState(ATNState *state);
+    int addState(std::unique_ptr<ATNState> state);
 
-    virtual void removeState(ATNState *state);
+    void removeState(int stateNumber);
 
-    virtual int defineDecisionState(DecisionState *s);
+    int defineDecisionState(DecisionState *s);
 
-    virtual DecisionState *getDecisionState(size_t decision) const;
+    DecisionState* getDecisionState(size_t decision) const;
 
-    virtual size_t getNumberOfDecisions() const;
+    size_t getNumberOfDecisions() const;
 
     /// <summary>
     /// Computes the set of input symbols which could follow ATN state number
@@ -106,12 +125,32 @@ namespace atn {
     /// specified state in the specified context. </returns>
     /// <exception cref="IllegalArgumentException"> if the ATN does not contain a state with
     /// number {@code stateNumber} </exception>
-    virtual misc::IntervalSet getExpectedTokens(size_t stateNumber, RuleContext *context) const;
+    misc::IntervalSet getExpectedTokens(size_t stateNumber, RuleContext *context) const;
 
     std::string toString() const;
 
+    dfa::DFAState* addParserDFAState(dfa::DFA &dfa, std::unique_ptr<dfa::DFAState> state) const;
+
+    dfa::DFAState* addLexerDFAState(dfa::DFA &dfa, std::unique_ptr<dfa::DFAState> state, bool suppressEdge) const;
+
+    dfa::DFAState* getParserStartState(const dfa::DFA &dfa, const Parser &parser) const;
+
+    dfa::DFAState* getLexerStartState(const dfa::DFA &dfa) const;
+
+    dfa::DFAState* updateParserStartState(dfa::DFA &dfa, ATNConfigSet configs, Parser* parser, RuleContext *context) const;
+
+    dfa::DFAState* getParserExistingTargetState(const dfa::DFAState &state, size_t t) const;
+
+    dfa::DFAState* getLexerExistingTargetState(const dfa::DFAState &state, size_t t) const;
+
+    void addParserDFAEdge(dfa::DFAState *from, size_t t, dfa::DFAState *to) const;
+
+    void addLexerDFAEdge(dfa::DFAState *from, size_t t, dfa::DFAState *to) const;
+
   private:
     mutable std::mutex _mutex;
+    mutable std::shared_mutex _stateMutex;
+    mutable std::shared_mutex _edgeMutex;
   };
 
 } // namespace atn

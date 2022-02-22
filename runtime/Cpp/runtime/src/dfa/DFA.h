@@ -11,21 +11,58 @@ namespace antlr4 {
 namespace dfa {
 
   class ANTLR4CPP_PUBLIC DFA final {
+  private:
+    struct DFAStateHasher final {
+      size_t operator()(DFAState *dfaState) const {
+        return dfaState->hashCode();
+      }
+
+      size_t operator()(const std::unique_ptr<DFAState> &dfaState) const {
+        return (*this)(dfaState.get());
+      }
+    };
+
+    struct DFAStateComparer final {
+      bool operator()(DFAState *lhs, DFAState *rhs) const {
+        return lhs == rhs || *lhs == *rhs;
+      }
+
+      bool operator()(DFAState *lhs, const std::unique_ptr<DFAState> &rhs) const {
+        return (*this)(lhs, rhs.get());
+      }
+
+      bool operator()(const std::unique_ptr<DFAState> &lhs, DFAState *rhs) const {
+        return (*this)(lhs.get(), rhs);
+      }
+
+      bool operator()(const std::unique_ptr<DFAState> &lhs, const std::unique_ptr<DFAState> &rhs) const {
+        return (*this)(lhs.get(), rhs.get());
+      }
+    };
+
   public:
     /// A set of all DFA states. Use a map so we can get old state back.
     /// Set only allows you to see if it's there.
 
     /// From which ATN state did we create this DFA?
     atn::DecisionState *atnStartState;
-    std::unordered_set<DFAState *, DFAState::Hasher, DFAState::Comparer> states; // States are owned by this class.
+    std::unordered_set<std::unique_ptr<DFAState>, DFAStateHasher, DFAStateComparer> states; // States are owned by this class.
     DFAState *s0;
     size_t decision;
 
     explicit DFA(atn::DecisionState *atnStartState);
+
     DFA(atn::DecisionState *atnStartState, size_t decision);
-    DFA(const DFA &other) = delete;
-    DFA(DFA &&other);
+
+    DFA(const DFA&) = delete;
+
+    DFA(DFA&&);
+
     ~DFA();
+
+    DFA& operator=(const DFA&) = delete;
+
+    DFA& operator=(DFA&&);
 
     /**
      * Gets whether this DFA is a precedence DFA. Precedence DFAs use a special
@@ -65,7 +102,7 @@ namespace dfa {
     void setPrecedenceStartState(int precedence, DFAState *startState, std::shared_mutex &lock);
 
     /// Return a list of all states in this DFA, ordered by state number.
-    std::vector<DFAState *> getStates() const;
+    std::vector<DFAState*> getStates() const;
 
     std::string toString(const Vocabulary &vocabulary) const;
 

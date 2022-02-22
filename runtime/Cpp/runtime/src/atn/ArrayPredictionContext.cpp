@@ -5,75 +5,43 @@
 
 #include "support/Arrays.h"
 #include "atn/SingletonPredictionContext.h"
+#include "atn/AnyPredictionContext.h"
 
 #include "atn/ArrayPredictionContext.h"
 
 using namespace antlr4::atn;
 
-ArrayPredictionContext::ArrayPredictionContext(Ref<const SingletonPredictionContext> const& a)
-  : ArrayPredictionContext({ a->parent }, { a->returnState }) {
+ArrayPredictionContext::ArrayPredictionContext(const SingletonPredictionContext &other) {
+  auto pairs = std::make_shared<std::vector<std::pair<AnyPredictionContext, size_t>>>();
+  pairs->reserve(1);
+  pairs->emplace_back(other.getParent(0), other.getReturnState(0));
+  pairs->shrink_to_fit();
+  _pairs = std::move(pairs);
 }
 
-ArrayPredictionContext::ArrayPredictionContext(std::vector<Ref<const PredictionContext>> parents,
-                                               std::vector<size_t> returnStates)
-  : PredictionContext(calculateHashCode(parents, returnStates)), parents(std::move(parents)), returnStates(std::move(returnStates)) {
-    assert(this->parents.size() > 0);
-    assert(this->returnStates.size() > 0);
+ArrayPredictionContext::ArrayPredictionContext(std::vector<std::pair<AnyPredictionContext, size_t>> pairs) {
+  pairs.shrink_to_fit();
+  assert(pairs.size() > 0);
+  _pairs = std::make_shared<std::vector<std::pair<AnyPredictionContext, size_t>>>(std::move(pairs));
+}
+
+PredictionContextType ArrayPredictionContext::getType() const {
+  return PredictionContextType::ARRAY;
 }
 
 bool ArrayPredictionContext::isEmpty() const {
   // Since EMPTY_RETURN_STATE can only appear in the last position, we don't need to verify that size == 1.
-  return returnStates[0] == EMPTY_RETURN_STATE;
+  return getReturnState(0) == EMPTY_RETURN_STATE;
 }
 
 size_t ArrayPredictionContext::size() const {
-  return returnStates.size();
+  return _pairs->size();
 }
 
-Ref<const PredictionContext> ArrayPredictionContext::getParent(size_t index) const {
-  return parents[index];
+const AnyPredictionContext& ArrayPredictionContext::getParent(size_t index) const {
+  return (*_pairs)[index].first;
 }
 
 size_t ArrayPredictionContext::getReturnState(size_t index) const {
-  return returnStates[index];
-}
-
-bool ArrayPredictionContext::operator == (PredictionContext const& o) const {
-  if (this == &o) {
-    return true;
-  }
-
-  const ArrayPredictionContext *other = dynamic_cast<const ArrayPredictionContext*>(&o);
-  if (other == nullptr || hashCode() != other->hashCode()) {
-    return false; // can't be same if hash is different
-  }
-
-  return antlrcpp::Arrays::equals(returnStates, other->returnStates) &&
-    antlrcpp::Arrays::equals(parents, other->parents);
-}
-
-std::string ArrayPredictionContext::toString() const {
-  if (isEmpty()) {
-    return "[]";
-  }
-
-  std::stringstream ss;
-  ss << "[";
-  for (size_t i = 0; i < returnStates.size(); i++) {
-    if (i > 0) {
-      ss << ", ";
-    }
-    if (returnStates[i] == EMPTY_RETURN_STATE) {
-      ss << "$";
-      continue;
-    }
-    ss << returnStates[i];
-    if (parents[i] != nullptr) {
-      ss << " " << parents[i]->toString();
-    } else {
-      ss << "nul";
-    }
-  }
-  ss << "]";
-  return ss.str();
+  return (*_pairs)[index].second;
 }

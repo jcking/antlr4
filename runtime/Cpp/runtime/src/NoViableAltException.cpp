@@ -9,29 +9,15 @@
 
 using namespace antlr4;
 
-namespace {
-
-// Create a normal shared pointer if the configurations are to be deleted. If not, then
-// the shared pointer is created with a deleter that does nothing.
-Ref<atn::ATNConfigSet> buildConfigsRef(atn::ATNConfigSet *configs, bool deleteConfigs) {
-  if (deleteConfigs) {
-    return Ref<atn::ATNConfigSet>(configs);
-  } else {
-    return Ref<atn::ATNConfigSet>(configs, [](atn::ATNConfigSet *){});
-  }
-}
-
-}
-
 NoViableAltException::NoViableAltException(Parser *recognizer)
   : NoViableAltException(recognizer, recognizer->getTokenStream(), recognizer->getCurrentToken(),
-                         recognizer->getCurrentToken(), nullptr, recognizer->getContext(), false) {
+                         recognizer->getCurrentToken(), atn::ATNConfigSet(), recognizer->getContext()) {
 }
 
 NoViableAltException::NoViableAltException(Parser *recognizer, TokenStream *input,Token *startToken,
-  Token *offendingToken, atn::ATNConfigSet *deadEndConfigs, ParserRuleContext *ctx, bool deleteConfigs)
+  Token *offendingToken, atn::ATNConfigSet deadEndConfigs, ParserRuleContext *ctx)
   : RecognitionException("No viable alternative", recognizer, input, ctx, offendingToken),
-    _deadEndConfigs(buildConfigsRef(deadEndConfigs, deleteConfigs)), _startToken(startToken) {
+    _deadEndConfigs(std::move(deadEndConfigs)), _startToken(startToken) {
 }
 
 NoViableAltException::~NoViableAltException() {
@@ -41,6 +27,6 @@ Token* NoViableAltException::getStartToken() const {
   return _startToken;
 }
 
-atn::ATNConfigSet* NoViableAltException::getDeadEndConfigs() const {
-  return _deadEndConfigs.get();
+const atn::ATNConfigSet* NoViableAltException::getDeadEndConfigs() const {
+  return &_deadEndConfigs;
 }

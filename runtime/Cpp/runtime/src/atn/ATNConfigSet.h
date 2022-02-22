@@ -18,9 +18,39 @@ namespace atn {
   /// Specialized set that can track info about the set, with support for combining similar configurations using a
   /// graph-structured stack.
   class ANTLR4CPP_PUBLIC ATNConfigSet {
+  private:
+    static size_t hashCode(bool ordered, const ATNConfig &atnConfig);
+
+    static bool equals(bool ordered, const ATNConfig &lhs, const ATNConfig &rhs);
+
+    struct ATNConfigHasher final {
+      bool ordered;
+
+      size_t operator()(const ATNConfig &other) const {
+        return ATNConfigSet::hashCode(ordered, other);
+      }
+    };
+
+    struct ATNConfigComparer final {
+      bool ordered;
+
+      bool operator()(const ATNConfig &lhs, const ATNConfig &rhs) const {
+        return ATNConfigSet::equals(ordered, lhs, rhs);
+      }
+    };
+
+    using Container = std::unordered_set<ATNConfig, ATNConfigHasher, ATNConfigComparer>;
+
   public:
-    /// Track the elements as they are added to the set; supports get(i)
-    std::vector<Ref<ATNConfig>> configs;
+    using value_type = ATNConfig;
+    using size_type = size_t;
+    using difference_type = ptrdiff_t;
+    using reference = ATNConfig&;
+    using const_reference = const ATNConfig&;
+    using pointer = ATNConfig*;
+    using const_pointer = const ATNConfig*;
+    using iterator = typename Container::iterator;
+    using const_iterator = typename Container::const_iterator;
 
     // TODO: these fields make me pretty uncomfortable but nice to pack up info together, saves recomputation
     // TODO: can we track conflicts as they are added to save scanning configs later?
@@ -41,19 +71,19 @@ namespace atn {
     /// Indicates that this configuration set is part of a full context
     /// LL prediction. It will be used to determine how to merge $. With SLL
     /// it's a wildcard whereas it is not for LL context merge.
-    const bool fullCtx = true;
+    bool fullCtx = true;
 
     ATNConfigSet();
 
-    ATNConfigSet(const ATNConfigSet &other);
-
-    ATNConfigSet(ATNConfigSet &&) = delete;
-
     explicit ATNConfigSet(bool fullCtx);
 
-    virtual ~ATNConfigSet() = default;
+    ATNConfigSet(const ATNConfigSet&) = default;
 
-    bool add(const Ref<ATNConfig> &config);
+    ATNConfigSet(ATNConfigSet&&) = default;
+
+    ATNConfigSet& operator=(const ATNConfigSet&) = default;
+
+    ATNConfigSet& operator=(ATNConfigSet&&) = default;
 
     /// <summary>
     /// Adding a new config means merging contexts with existing configs for
@@ -65,9 +95,11 @@ namespace atn {
     /// This method updates <seealso cref="#dipsIntoOuterContext"/> and
     /// <seealso cref="#hasSemanticContext"/> when necessary.
     /// </summary>
-    bool add(const Ref<ATNConfig> &config, PredictionContextMergeCache *mergeCache);
+    bool add(const ATNConfig& config);
 
     bool addAll(const ATNConfigSet &other);
+
+    void reserve(size_t size);
 
     std::vector<ATNState *> getStates() const;
 
@@ -82,9 +114,19 @@ namespace atn {
     antlrcpp::BitSet getAlts() const;
     std::vector<AnySemanticContext> getPredicates() const;
 
-    const Ref<ATNConfig>& get(size_t i) const;
-
     void optimizeConfigs(ATNSimulator *interpreter);
+
+    iterator begin() { return _configLookup.begin(); }
+
+    iterator end() { return _configLookup.end(); }
+
+    const_iterator begin() const { return _configLookup.begin(); }
+
+    const_iterator end() const { return _configLookup.end(); }
+
+    const_iterator cbegin() const { return _configLookup.cbegin(); }
+
+    const_iterator cend() const { return _configLookup.cend(); }
 
     size_t size() const;
     bool isEmpty() const;
@@ -92,33 +134,28 @@ namespace atn {
     bool isReadonly() const;
     void setReadonly(bool readonly);
 
-    virtual size_t hashCode() const;
+    size_t hashCode() const;
 
-    virtual bool equals(const ATNConfigSet &other) const;
+    bool equals(const ATNConfigSet &other) const;
 
-    virtual std::string toString() const;
+    std::string toString() const;
+
+    friend void swap(ATNConfigSet &lhs, ATNConfigSet &rhs) {
+      std::swap(lhs.uniqueAlt, rhs.uniqueAlt);
+      std::swap(lhs.conflictingAlts, rhs.conflictingAlts);
+      std::swap(lhs.hasSemanticContext, rhs.hasSemanticContext);
+      std::swap(lhs.dipsIntoOuterContext, rhs.dipsIntoOuterContext);
+      std::swap(lhs.fullCtx, rhs.fullCtx);
+      std::swap(lhs._cachedHashCode, rhs._cachedHashCode);
+      std::swap(lhs._readonly, rhs._readonly);
+      std::swap(lhs._configLookup, rhs._configLookup);
+    }
+
+  protected:
+    ATNConfigSet(bool fullCtx, bool ordered);
 
   private:
-    struct ATNConfigHasher final {
-      const ATNConfigSet* atnConfigSet;
-
-      size_t operator()(const ATNConfig *other) const {
-        assert(other != nullptr);
-        return atnConfigSet->hashCode(*other);
-      }
-    };
-
-    struct ATNConfigComparer final {
-      const ATNConfigSet* atnConfigSet;
-
-      bool operator()(const ATNConfig *lhs, const ATNConfig *rhs) const {
-        assert(lhs != nullptr);
-        assert(rhs != nullptr);
-        return atnConfigSet->equals(*lhs, *rhs);
-      }
-    };
-
-    mutable std::atomic<size_t> _cachedHashCode = 0;
+    mutable size_t _cachedHashCode = 0;
 
     /// Indicates that the set of configurations is read-only. Do not
     /// allow any code to manipulate the set; DFA states will point at
@@ -127,13 +164,9 @@ namespace atn {
     /// we've made this readonly.
     bool _readonly = false;
 
-    virtual size_t hashCode(const ATNConfig &atnConfig) const;
-
-    virtual bool equals(const ATNConfig &lhs, const ATNConfig &rhs) const;
-
     /// All configs but hashed by (s, i, _, pi) not including context. Wiped out
     /// when we go readonly as this set becomes a DFA state.
-    std::unordered_set<ATNConfig*, ATNConfigHasher, ATNConfigComparer> _configLookup;
+    Container _configLookup;
   };
 
   inline bool operator==(const ATNConfigSet &lhs, const ATNConfigSet &rhs) { return lhs.equals(rhs); }

@@ -452,7 +452,7 @@ namespace antlr4 {
     /// bypass alternatives.
     ///
     /// <seealso cref= ATNDeserializationOptions#isGenerateRuleBypassTransitions() </seealso>
-    static std::map<std::vector<uint16_t>, atn::ATN> bypassAltsAtnCache;
+    static std::map<std::vector<uint16_t>, std::unique_ptr<atn::ATN>> bypassAltsAtnCache;
 
     /// When setTrace(true) is called, a reference to the
     /// TraceListener is stored here so it can be easily removed in a

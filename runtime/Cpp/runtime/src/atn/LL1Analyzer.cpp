@@ -5,7 +5,9 @@
 
 #include "atn/RuleStopState.h"
 #include "atn/Transition.h"
+#include "atn/ATN.h"
 #include "atn/AnyTransition.h"
+#include "atn/AnyPredictionContext.h"
 #include "atn/RuleTransition.h"
 #include "atn/SingletonPredictionContext.h"
 #include "atn/AbstractPredicateTransition.h"
@@ -70,38 +72,38 @@ namespace {
     /// <param name="addEOF"> Add <seealso cref="Token#EOF"/> to the result if the end of the
     /// outermost context is reached. This parameter has no effect if {@code ctx}
     /// is {@code null}. </param>
-    void LOOK(ATNState *s, ATNState *stopState, Ref<const PredictionContext> const& ctx) {
+    void LOOK(ATNState *s, ATNState *stopState, const AnyPredictionContext &ctx) {
       if (!_lookBusy.insert(ATNConfig(s, 0, ctx)).second) {
         return;
       }
 
       // ml: s can never be null, hence no need to check if stopState is != null.
       if (s == stopState) {
-        if (ctx == nullptr) {
+        if (!ctx.valid()) {
           _look.add(Token::EPSILON);
           return;
-        } else if (ctx->isEmpty() && _addEOF) {
+        } else if (ctx.isEmpty() && _addEOF) {
           _look.add(Token::EOF);
           return;
         }
       }
 
       if (s->getStateType() == ATNState::RULE_STOP) {
-        if (ctx == nullptr) {
+        if (!ctx.valid()) {
           _look.add(Token::EPSILON);
           return;
-        } else if (ctx->isEmpty() && _addEOF) {
+        } else if (ctx.isEmpty() && _addEOF) {
           _look.add(Token::EOF);
           return;
         }
 
-        if (ctx != PredictionContext::EMPTY) {
+        if (ctx != PredictionContext::empty()) {
           bool removed = _calledRuleStack.test(s->ruleIndex);
           _calledRuleStack[s->ruleIndex] = false;
           // run thru all possible stack tops in ctx
-          for (size_t i = 0; i < ctx->size(); i++) {
-            ATNState *returnState = _atn.states[ctx->getReturnState(i)];
-            LOOK(returnState, stopState, ctx->getParent(i));
+          for (size_t i = 0; i < ctx.size(); i++) {
+            ATNState *returnState = _atn.states[ctx.getReturnState(i)].get();
+            LOOK(returnState, stopState, ctx.getParent(i));
           }
           if (removed) {
             _calledRuleStack.set(s->ruleIndex);
@@ -119,7 +121,7 @@ namespace {
             continue;
           }
 
-          Ref<const PredictionContext> newContext = SingletonPredictionContext::create(ctx, t.as<RuleTransition>().getFollowState()->stateNumber);
+          AnyPredictionContext newContext = SingletonPredictionContext::create(ctx, t.as<RuleTransition>().getFollowState()->stateNumber);
 
           _calledRuleStack.set(t.getTarget()->ruleIndex);
           LOOK(t.getTarget(), stopState, newContext);
@@ -168,7 +170,7 @@ std::vector<misc::IntervalSet> LL1Analyzer::getDecisionLookahead(ATNState *s) co
   look.resize(s->transitions.size()); // Fills all interval sets with defaults.
   for (size_t alt = 0; alt < s->transitions.size(); alt++) {
     LL1AnalyzerImpl impl(_atn, look[alt], false, false);
-    impl.LOOK(s->transitions[alt].getTarget(), nullptr, PredictionContext::EMPTY);
+    impl.LOOK(s->transitions[alt].getTarget(), nullptr, PredictionContext::empty());
     // Wipe out lookahead for this alternative if we found nothing
     // or we had a predicate when we !seeThruPreds
     if (look[alt].size() == 0 || look[alt].contains(LL1Analyzer::HIT_PRED)) {
@@ -183,7 +185,7 @@ misc::IntervalSet LL1Analyzer::LOOK(ATNState *s, RuleContext *ctx) const {
 }
 
 misc::IntervalSet LL1Analyzer::LOOK(ATNState *s, ATNState *stopState, RuleContext *ctx) const {
-  Ref<const PredictionContext> lookContext = ctx != nullptr ? PredictionContext::fromRuleContext(_atn, ctx) : nullptr;
+  AnyPredictionContext lookContext = ctx != nullptr ? PredictionContext::fromRuleContext(_atn, ctx) : AnyPredictionContext();
   misc::IntervalSet r;
   LL1AnalyzerImpl impl(_atn, r, true, true);
   impl.LOOK(s, stopState, lookContext);

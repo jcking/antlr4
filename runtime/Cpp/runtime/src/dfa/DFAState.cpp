@@ -19,49 +19,43 @@ std::string DFAState::PredPrediction::toString() const {
   return std::string("(") + pred.toString() + ", " + std::to_string(alt) + ")";
 }
 
-DFAState::DFAState() {
-  InitializeInstanceFields();
-}
-
 DFAState::DFAState(int state) : DFAState() {
   stateNumber = state;
 }
 
-DFAState::DFAState(std::unique_ptr<ATNConfigSet> configs_) : DFAState() {
-  configs = std::move(configs_);
+DFAState::DFAState(ATNConfigSet configs) : DFAState() {
+  this->configs = std::move(configs);
 }
 
 std::set<size_t> DFAState::getAltSet() const {
   std::set<size_t> alts;
-  if (configs != nullptr) {
-    for (size_t i = 0; i < configs->size(); i++) {
-      alts.insert(configs->get(i)->alt);
-    }
+  for (const auto &config : configs) {
+    alts.insert(config.alt);
   }
   return alts;
 }
 
 size_t DFAState::hashCode() const {
   size_t hash = misc::MurmurHash::initialize(7);
-  hash = misc::MurmurHash::update(hash, configs->hashCode());
+  hash = misc::MurmurHash::update(hash, configs);
   hash = misc::MurmurHash::finish(hash, 1);
   return hash;
 }
 
-bool DFAState::operator == (const DFAState &o) const {
+bool DFAState::equals(const DFAState &other) const {
   // compare set of ATN configurations in this set with other
-  if (this == &o) {
+  if (this == &other) {
     return true;
   }
 
-  return *configs == *o.configs;
+  return configs == other.configs;
 }
 
 std::string DFAState::toString() const {
   std::stringstream ss;
   ss << stateNumber;
-  if (configs) {
-    ss << ":" << configs->toString();
+  if (!configs.isEmpty()) {
+    ss << ":" << configs.toString();
   }
   if (isAcceptState) {
     ss << " => ";
@@ -74,11 +68,4 @@ std::string DFAState::toString() const {
     }
   }
   return ss.str();
-}
-
-void DFAState::InitializeInstanceFields() {
-  stateNumber = -1;
-  isAcceptState = false;
-  prediction = 0;
-  requiresFullContext = false;
 }

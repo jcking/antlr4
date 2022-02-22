@@ -32,7 +32,7 @@ using namespace antlr4::atn;
 
 using namespace antlrcpp;
 
-std::map<std::vector<uint16_t>, atn::ATN> Parser::bypassAltsAtnCache;
+std::map<std::vector<uint16_t>, std::unique_ptr<atn::ATN>> Parser::bypassAltsAtnCache;
 
 Parser::TraceListener::TraceListener(Parser *outerInstance_) : outerInstance(outerInstance_) {
 }
@@ -233,7 +233,7 @@ const atn::ATN& Parser::getATNWithBypassAlts() {
     bypassAltsAtnCache[serializedAtn] = deserializer.deserialize(serializedAtn);
   }
 
-  return bypassAltsAtnCache[serializedAtn];
+  return *bypassAltsAtnCache[serializedAtn];
 }
 
 tree::pattern::ParseTreePattern Parser::compileParseTreePattern(const std::string &pattern, int patternRuleIndex) {
@@ -472,7 +472,7 @@ bool Parser::inContext(const std::string &/*context*/) {
 bool Parser::isExpectedToken(size_t symbol) {
   const atn::ATN &atn = getInterpreter<atn::ParserATNSimulator>()->atn;
   ParserRuleContext *ctx = _ctx;
-  atn::ATNState *s = atn.states[getState()];
+  atn::ATNState *s = atn.states[getState()].get();
   misc::IntervalSet following = atn.nextTokens(s);
 
   if (following.contains(symbol)) {
@@ -484,7 +484,7 @@ bool Parser::isExpectedToken(size_t symbol) {
   }
 
   while (ctx && ctx->invokingState != ATNState::INVALID_STATE_NUMBER && following.contains(Token::EPSILON)) {
-    atn::ATNState *invokingState = atn.states[ctx->invokingState];
+    atn::ATNState *invokingState = atn.states[ctx->invokingState].get();
     following = atn.nextTokens(invokingState->transitions[0].as<atn::RuleTransition>().getFollowState());
     if (following.contains(symbol)) {
       return true;
@@ -510,7 +510,7 @@ misc::IntervalSet Parser::getExpectedTokens() {
 
 misc::IntervalSet Parser::getExpectedTokensWithinCurrentRule() {
   const atn::ATN &atn = getInterpreter<atn::ParserATNSimulator>()->atn;
-  atn::ATNState *s = atn.states[getState()];
+  atn::ATNState *s = atn.states[getState()].get();
   return atn.nextTokens(s);
 }
 
@@ -602,7 +602,7 @@ void Parser::setProfile(bool profile) {
     }
   } else if (is<atn::ProfilingATNSimulator *>(interp)) {
     /* mem-check: replacing existing interpreter which gets deleted. */
-    atn::ParserATNSimulator *sim = new atn::ParserATNSimulator(this, getATN(), interp->decisionToDFA, interp->getSharedContextCache());
+    atn::ParserATNSimulator *sim = new atn::ParserATNSimulator(this, getATN(), interp->decisionToDFA);
     setInterpreter(sim);
   }
   getInterpreter<atn::ParserATNSimulator>()->setPredictionMode(saveMode);

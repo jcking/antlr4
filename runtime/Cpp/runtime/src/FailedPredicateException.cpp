@@ -26,7 +26,7 @@ FailedPredicateException::FailedPredicateException(Parser *recognizer, const std
   : RecognitionException(!message.empty() ? message : "failed predicate: " + predicate + "?", recognizer,
                          recognizer->getInputStream(), recognizer->getContext(), recognizer->getCurrentToken()) {
 
-  atn::ATNState *s = recognizer->getInterpreter<atn::ATNSimulator>()->atn.states[recognizer->getState()];
+  atn::ATNState *s = recognizer->getInterpreter<atn::ATNSimulator>()->atn.states[recognizer->getState()].get();
   const atn::AnyTransition &transition = s->transitions[0];
   if (transition.is<atn::PredicateTransition>()) {
     _ruleIndex = transition.as<atn::PredicateTransition>().getRuleIndex();
