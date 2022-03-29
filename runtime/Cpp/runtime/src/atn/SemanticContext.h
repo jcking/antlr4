@@ -198,8 +198,6 @@ namespace atn {
 }  // namespace atn
 }  // namespace antlr4
 
-// Hash function for SemanticContext, used in the MurmurHash::update function
-
 namespace std {
 
   template <>

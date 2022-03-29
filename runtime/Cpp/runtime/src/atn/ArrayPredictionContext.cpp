@@ -4,11 +4,14 @@
  */
 
 #include "support/Arrays.h"
+#include "support/Casts.h"
 #include "atn/SingletonPredictionContext.h"
+#include "misc/MurmurHash.h"
 
 #include "atn/ArrayPredictionContext.h"
 
 using namespace antlr4::atn;
+using namespace antlrcpp;
 
 ArrayPredictionContext::ArrayPredictionContext(Ref<const SingletonPredictionContext> const& a)
   : ArrayPredictionContext({ a->parent }, { a->returnState }) {
@@ -16,9 +19,10 @@ ArrayPredictionContext::ArrayPredictionContext(Ref<const SingletonPredictionCont
 
 ArrayPredictionContext::ArrayPredictionContext(std::vector<Ref<const PredictionContext>> parents,
                                                std::vector<size_t> returnStates)
-  : PredictionContext(PredictionContextType::ARRAY, calculateHashCode(parents, returnStates)), parents(std::move(parents)), returnStates(std::move(returnStates)) {
+  : PredictionContext(PredictionContextType::ARRAY), parents(std::move(parents)), returnStates(std::move(returnStates)) {
     assert(this->parents.size() > 0);
     assert(this->returnStates.size() > 0);
+    assert(this->parents.size() == this->returnStates.size());
 }
 
 bool ArrayPredictionContext::isEmpty() const {
@@ -30,7 +34,7 @@ size_t ArrayPredictionContext::size() const {
   return returnStates.size();
 }
 
-Ref<const PredictionContext> ArrayPredictionContext::getParent(size_t index) const {
+const Ref<const PredictionContext>& ArrayPredictionContext::getParent(size_t index) const {
   return parents[index];
 }
 
@@ -38,21 +42,28 @@ size_t ArrayPredictionContext::getReturnState(size_t index) const {
   return returnStates[index];
 }
 
-bool ArrayPredictionContext::operator == (PredictionContext const& o) const {
-  if (this == &o) {
+size_t ArrayPredictionContext::hashCodeImpl() const {
+  size_t hash = misc::MurmurHash::initialize();
+  hash = misc::MurmurHash::update(hash, static_cast<size_t>(getContextType()));
+  for (const auto &parent : parents) {
+    hash = misc::MurmurHash::update(hash, parent);
+  }
+  for (const auto &returnState : returnStates) {
+    hash = misc::MurmurHash::update(hash, returnState);
+  }
+  return misc::MurmurHash::finish(hash, 1 + parents.size() + returnStates.size());
+}
+
+bool ArrayPredictionContext::equals(const PredictionContext &other) const {
+  if (this == &other) {
     return true;
   }
-  if (o.getContextType() != PredictionContextType::ARRAY) {
+  if (getContextType() != other.getContextType()) {
     return false;
   }
-
-  const ArrayPredictionContext *other = static_cast<const ArrayPredictionContext*>(&o);
-  if (hashCode() != other->hashCode()) {
-    return false; // can't be same if hash is different
-  }
-
-  return antlrcpp::Arrays::equals(returnStates, other->returnStates) &&
-    antlrcpp::Arrays::equals(parents, other->parents);
+  const ArrayPredictionContext &array = downCast<const ArrayPredictionContext&>(other);
+  return Arrays::equals(returnStates, array.returnStates) &&
+    Arrays::equals(parents, array.parents);
 }
 
 std::string ArrayPredictionContext::toString() const {

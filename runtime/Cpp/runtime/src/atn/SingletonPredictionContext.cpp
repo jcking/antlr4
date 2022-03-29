@@ -5,16 +5,18 @@
 
 #include "atn/SingletonPredictionContext.h"
 
+#include "support/Casts.h"
+#include "misc/MurmurHash.h"
+
 using namespace antlr4::atn;
+using namespace antlrcpp;
 
 SingletonPredictionContext::SingletonPredictionContext(Ref<const PredictionContext> parent, size_t returnState)
-  : PredictionContext(PredictionContextType::SINGLETON, parent ? calculateHashCode(parent, returnState) : calculateEmptyHashCode()),
-    parent(std::move(parent)), returnState(returnState) {
+  : PredictionContext(PredictionContextType::SINGLETON), parent(std::move(parent)), returnState(returnState) {
   assert(returnState != ATNState::INVALID_STATE_NUMBER);
 }
 
 Ref<const SingletonPredictionContext> SingletonPredictionContext::create(Ref<const PredictionContext> parent, size_t returnState) {
-
   if (returnState == EMPTY_RETURN_STATE && parent) {
     // someone can pass in the bits of an array ctx that mean $
     return std::dynamic_pointer_cast<const SingletonPredictionContext>(EMPTY);
@@ -30,7 +32,7 @@ size_t SingletonPredictionContext::size() const {
   return 1;
 }
 
-Ref<const PredictionContext> SingletonPredictionContext::getParent(size_t index) const {
+const Ref<const PredictionContext>& SingletonPredictionContext::getParent(size_t index) const {
   assert(index == 0);
   ((void)(index)); // Make Release build happy.
   return parent;
@@ -42,29 +44,32 @@ size_t SingletonPredictionContext::getReturnState(size_t index) const {
   return returnState;
 }
 
-bool SingletonPredictionContext::operator == (const PredictionContext &o) const {
-  if (this == &o) {
+size_t SingletonPredictionContext::hashCodeImpl() const {
+  size_t hash = misc::MurmurHash::initialize();
+  hash = misc::MurmurHash::update(hash, static_cast<size_t>(getContextType()));
+  hash = misc::MurmurHash::update(hash, parent);
+  hash = misc::MurmurHash::update(hash, returnState);
+  return misc::MurmurHash::finish(hash, 3);
+}
+
+bool SingletonPredictionContext::equals(const PredictionContext &other) const {
+  if (this == &other) {
     return true;
   }
-
-  if (o.getContextType() != PredictionContextType::SINGLETON) {
+  if (getContextType() != other.getContextType()) {
     return false;
   }
-
-  const SingletonPredictionContext *other = static_cast<const SingletonPredictionContext*>(&o);
-  if (this->hashCode() != other->hashCode()) {
-    return false; // can't be same if hash is different
-  }
-
-  if (returnState != other->returnState)
+  const auto &singleton = downCast<const SingletonPredictionContext&>(other);
+  if (returnState != singleton.returnState) {
     return false;
-
-  if (!parent && !other->parent)
+  }
+  if (!parent && !singleton.parent) {
     return true;
-  if (!parent || !other->parent)
+  }
+  if (!parent || !singleton.parent) {
     return false;
-
-   return parent == other->parent || *parent == *other->parent;
+  }
+  return parent == singleton.parent || *parent == *singleton.parent;
 }
 
 std::string SingletonPredictionContext::toString() const {
