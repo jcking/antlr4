@@ -12,6 +12,10 @@ namespace atn {
 
   class ANTLR4CPP_PUBLIC SingletonPredictionContext final : public PredictionContext {
   public:
+    static bool is(const PredictionContext &predictionContext) { return predictionContext.getContextType() == PredictionContextType::SINGLETON; }
+
+    static bool is(const PredictionContext *predictionContext) { return predictionContext != nullptr && is(*predictionContext); }
+
     static Ref<const SingletonPredictionContext> create(Ref<const PredictionContext> parent, size_t returnState);
 
     // Usually a parent is linked via a weak ptr. Not so here as we have kinda reverse reference chain.
